@@ -20,50 +20,37 @@ use Symfony\Component\Translation\Exception\NotFoundResourceException;
  */
 class CsvFileLoader extends FileLoader
 {
-    private $delimiter = ';';
-    private $enclosure = '"';
-    private $escape = '\\';
+    private string $delimiter = ';';
+    private string $enclosure = '"';
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function loadResource($resource)
+    protected function loadResource(string $resource): array
     {
         $messages = [];
 
-        try {
-            $file = new \SplFileObject($resource, 'rb');
-        } catch (\RuntimeException $e) {
-            throw new NotFoundResourceException(sprintf('Error opening file "%s".', $resource), 0, $e);
+        if (!$file = @fopen($resource, 'r')) {
+            throw new NotFoundResourceException(\sprintf('Error opening file "%s".', $resource));
         }
 
-        $file->setFlags(\SplFileObject::READ_CSV | \SplFileObject::SKIP_EMPTY);
-        $file->setCsvControl($this->delimiter, $this->enclosure, $this->escape);
-
-        foreach ($file as $data) {
-            if (false === $data) {
-                continue;
+        try {
+            while (false !== $data = fgetcsv($file, null, $this->delimiter, $this->enclosure, '')) {
+                // empty lines are read as [null]
+                if (isset($data[1]) && 2 === \count($data) && !str_starts_with($data[0], '#')) {
+                    $messages[$data[0]] = $data[1];
+                }
             }
-
-            if ('#' !== substr($data[0], 0, 1) && isset($data[1]) && 2 === \count($data)) {
-                $messages[$data[0]] = $data[1];
-            }
+        } finally {
+            fclose($file);
         }
 
         return $messages;
     }
 
     /**
-     * Sets the delimiter, enclosure, and escape character for CSV.
-     *
-     * @param string $delimiter Delimiter character
-     * @param string $enclosure Enclosure character
-     * @param string $escape    Escape character
+     * Sets the delimiter and enclosure character for CSV.
      */
-    public function setCsvControl($delimiter = ';', $enclosure = '"', $escape = '\\')
+    public function setCsvControl(string $delimiter = ';', string $enclosure = '"'): void
     {
         $this->delimiter = $delimiter;
         $this->enclosure = $enclosure;
-        $this->escape = $escape;
     }
 }

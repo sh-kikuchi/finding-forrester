@@ -2,91 +2,244 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreBookRequest;
+use App\Http\Requests\UpdateBookRequest;
+use App\Models\Book;
+use App\Models\Stock;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use App\Book;
-use App\Stock;
-use Auth;
-use Carbon\Carbon;
-use GuzzleHttp\Client;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\View\View;
 
+/**
+ * 本の登録・検索・詳細表示・編集・削除を扱うコントローラー。
+ *
+ * `new()`（入荷本一覧）のみ誰でも閲覧可能な公開画面で、それ以外は`auth`+`role:admin`
+ * ミドルウェア配下（管理者/店舗ロール専用）。本屋（StoreController）とは異なり、
+ * ここは出品者自身が自分の本棚を管理するための画面。
+ * 「そもそも管理者かどうか」はroute側のmiddlewareが判定し、「この本の所有者かどうか」は
+ * `BookPolicy`が判定する。
+ */
 class BookController extends Controller
 {
-    public function index(Request $request) {
-        return view('book.home');
-    }
-    public function home() {
-        $books = Book::join('users', 'books.user_id', 'users.id')
-        ->where('books.user_id', Auth::id())
-        ->select('users.id','books.title', 'books.author', 'books.type', 'books.image')
-        ->simplePaginate(9);
-        return view('book.index', compact('books'));
-    }
-    public function new() {
-        $onemonth=Carbon::today()->subMonth();
-        $books=Book::whereDate('created_at', '>=', $onemonth)->get();
+    /**
+     * 過去1ヶ月に登録された本を一覧表示する。
+     *
+     * 誰でも閲覧可能。管理者自身の本には`book-card`コンポーネント側で編集・削除ボタンを
+     * 出し、それ以外（ゲスト・個人ユーザー・他の管理者の本を見る場合）はカート追加を出す。
+     *
+     * @return View 直近1ヶ月分の本一覧を渡す画面
+     */
+    public function new(): View
+    {
+        $books = Book::with('stock')
+            ->whereDate('created_at', '>=', Carbon::today()->subMonth())
+            ->get();
+
         return view('book.new', compact('books'));
     }
-    public function create(Request $request) {
-        if($request->isMethod('post')) {
-            $book = $request->input();
-            if(!empty($request->file('image'))) {
-                $imgname=$request->file('image')->getClientOriginalName();
-                $request->file('image')->storeAs('image', $imgname, 'bookimg');
+
+    /**
+     * 本の登録フォームを表示する（GET）、または新しい本を登録する（POST）。
+     *
+     * 同一ルートでGET/POSTの両方を受けるため`StoreBookRequest`を型ヒントできず、
+     * POST時のみ手動でバリデーションを実行している。
+     *
+     * @param  Request  $request  GET/POST両方を受け付けるリクエスト
+     * @return RedirectResponse|View POST成功時は登録フォームへのリダイレクト、GET時はフォーム画面
+     */
+    public function create(Request $request): RedirectResponse|View
+    {
+        if ($request->isMethod('post')) {
+            // The route accepts both GET and POST, so the request can't be type-hinted as
+            // StoreBookRequest directly: that would run its validation on the GET request too.
+            $validated = $request->validate((new StoreBookRequest)->rules());
+
+            $imageName = null;
+
+            if ($request->hasFile('image')) {
+                $imageName = $request->file('image')->getClientOriginalName();
+                $request->file('image')->storeAs('image', $imageName, 'bookimg');
+            } elseif ($request->filled('google_image_url')) {
+                $imageName = $validated['google_image_url'];
             }
-            Book::create([
+
+            $book = Book::create([
                 'user_id' => Auth::id(),
-                'title' => $book['title'],
-                'author' => $book['author'],
-                'type' => $book['type'],
-                'image' => $imgname,
+                'title' => $validated['title'],
+                'author' => $validated['author'],
+                'type' => $validated['type'],
+                'image' => $imageName,
+                'price' => $validated['price'],
+                'is_for_sale' => $request->boolean('is_for_sale', true),
             ]);
 
-            $stock = Book::latest()->first();
             Stock::create([
-                'book_id' => $stock->id,
-                'stock' => $book['stock'],
+                'book_id' => $book->id,
+                'stock' => $validated['stock'],
             ]);
-            return redirect('book/create');
+
+            return redirect()->route('book.create');
         }
+
         return view('book.create');
     }
-    public function search(Request $request) {
-        if($request->input('a_search')) {
-            $key = $request->input('a_search');
-            $books = Book::join('users', 'books.user_id', 'users.id')
-            ->where('title', 'like', '%'.$key.'%')
-            ->select('users.id','books.title', 'books.author', 'books.type', 'books.image')
-            ->simplePaginate(9);
+
+    /**
+     * Google Books検索結果の内容を、本の登録フォームにプリフィルする。
+     *
+     * @param  Request  $request  タイトル・著者・画像URL（任意）を含むリクエスト
+     * @return RedirectResponse 入力値を保持したまま登録フォームへのリダイレクト
+     */
+    public function createFromGoogle(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'author' => ['required', 'string', 'max:255'],
+            'image' => ['nullable', 'url', 'max:2048'],
+        ]);
+
+        // Google Books often serves thumbnails over http://, which browsers block as mixed content on an https page.
+        $imageUrl = isset($validated['image']) ? preg_replace('/^http:/', 'https:', $validated['image']) : null;
+
+        return redirect()->route('book.create')->withInput([
+            'title' => $validated['title'],
+            'author' => $validated['author'],
+            'type' => '未分類',
+            'stock' => 1,
+            'google_image_url' => $imageUrl,
+        ]);
+    }
+
+    /**
+     * タイトルによるサイト内検索、またはGoogle Books APIによる検索を行う。
+     *
+     * @param  Request  $request  `a_search`（サイト内検索）または`b_search`（Google検索）を含むリクエスト
+     * @return View 検索結果画面
+     */
+    public function search(Request $request): View
+    {
+        if ($request->filled('a_search')) {
+            $key = $request->string('a_search')->value();
+
+            $books = Book::where('title', 'like', "%{$key}%")->simplePaginate(9);
+
             return view('book.search', compact('books', 'key'));
         }
-        if($request->input('b_search')) {
-            $post_data = $request->all();
-            $data = "https://www.googleapis.com/books/v1/volumes?q=".$post_data["b_search"];
-            $json = file_get_contents($data);
-            $json_decode = json_decode($json, true);
-            // dd($json_decode['items']);
-            return view('book.search', compact("json_decode"));
+
+        if ($request->filled('b_search')) {
+            return $this->searchGoogleBooks($request->string('b_search')->value());
         }
+
         return view('book.search');
     }
-    public function show(Int $book) {
-        $book = Book::where('id', $book)
-        ->first();
-        return view('book.show',compact('book'));
+
+    /**
+     * Google Books APIを検索し、結果を表示する。接続失敗・APIエラー時は分かりやすいメッセージを表示する。
+     *
+     * @param  string  $query  検索キーワード
+     * @return View 検索結果、またはエラーメッセージを渡す画面
+     */
+    private function searchGoogleBooks(string $query): View
+    {
+        try {
+            $response = Http::timeout(10)->get('https://www.googleapis.com/books/v1/volumes', array_filter([
+                'q' => $query,
+                'key' => config('services.google_books.key'),
+            ]));
+        } catch (ConnectionException $exception) {
+            Log::warning('Google Books search failed to connect.', ['exception' => $exception->getMessage()]);
+
+            return view('book.search', [
+                'googleSearchError' => 'Google Booksへの接続に失敗しました。しばらくしてから再度お試しください。',
+            ]);
+        }
+
+        if ($response->failed()) {
+            Log::warning('Google Books search returned an error response.', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return view('book.search', [
+                'googleSearchError' => 'Google Books検索でエラーが発生しました。しばらくしてから再度お試しください。',
+            ]);
+        }
+
+        // The view expects $json_decode (see resources/views/book/search.blade.php).
+        return view('book.search', ['json_decode' => $response->json()]);
     }
-    public function edit(Int $book) {
-        $book = Book::where('id', $book)
-        ->first();
-        return view('book.edit',compact('book'));
+
+    /**
+     * 本の詳細を表示する。
+     *
+     * @param  Book  $book  ルートモデルバインディングで解決された対象の本
+     * @return View 本の詳細画面
+     */
+    public function show(Book $book): View
+    {
+        Gate::authorize('view', $book);
+
+        return view('book.show', compact('book'));
     }
-    public function update(Int $book, Request $request) {
-        $data = $request->input();
-        Book::where('id', $book)
-        ->update([
-            'title' => $data['title'],
-            'author' => $data['author'],
-            'type' => $data['type'],
-        ]);
+
+    /**
+     * 本の編集フォームを表示する。
+     *
+     * @param  Book  $book  ルートモデルバインディングで解決された対象の本
+     * @return View 編集フォーム画面
+     */
+    public function edit(Book $book): View
+    {
+        Gate::authorize('update', $book);
+
+        return view('book.edit', compact('book'));
+    }
+
+    /**
+     * 本の情報を更新する。
+     *
+     * @param  UpdateBookRequest  $request  検証済みの更新内容（在庫数・販売可否を含む）
+     * @param  Book  $book  ルートモデルバインディングで解決された対象の本
+     * @return RedirectResponse 詳細画面へのリダイレクト
+     */
+    public function update(UpdateBookRequest $request, Book $book): RedirectResponse
+    {
+        Gate::authorize('update', $book);
+
+        $validated = $request->validated();
+        $stock = $validated['stock'];
+        unset($validated['stock']);
+        $validated['is_for_sale'] = $request->boolean('is_for_sale');
+
+        $book->update($validated);
+        $book->stock()->updateOrCreate([], ['stock' => $stock]);
+
         return redirect()->route('book.show', ['book' => $book]);
+    }
+
+    /**
+     * 本を削除する。所有者本人以外がアクセスした場合は403を返す。
+     *
+     * @param  Book  $book  ルートモデルバインディングで解決された対象の本
+     * @return RedirectResponse 本棚一覧画面へのリダイレクト
+     */
+    public function destroy(Book $book): RedirectResponse
+    {
+        Gate::authorize('delete', $book);
+
+        if ($book->image) {
+            Storage::disk('bookimg')->delete('image/'.$book->image);
+        }
+
+        $book->delete();
+
+        return redirect()->route('book.new');
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * This file is part of the Carbon package.
  *
@@ -11,20 +13,9 @@
 
 namespace Carbon\Exceptions;
 
-use Exception;
 use InvalidArgumentException as BaseInvalidArgumentException;
 
 class InvalidPeriodParameterException extends BaseInvalidArgumentException implements InvalidArgumentException
 {
-    /**
-     * Constructor.
-     *
-     * @param string         $message
-     * @param int            $code
-     * @param Exception|null $previous
-     */
-    public function __construct($message, $code = 0, Exception $previous = null)
-    {
-        parent::__construct($message, $code, $previous);
-    }
+    //
 }

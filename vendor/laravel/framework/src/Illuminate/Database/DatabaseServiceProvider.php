@@ -4,9 +4,10 @@ namespace Illuminate\Database;
 
 use Faker\Factory as FakerFactory;
 use Faker\Generator as FakerGenerator;
+use Illuminate\Contracts\Database\ConcurrencyErrorDetector as ConcurrencyErrorDetectorContract;
+use Illuminate\Contracts\Database\LostConnectionDetector as LostConnectionDetectorContract;
 use Illuminate\Contracts\Queue\EntityResolver;
 use Illuminate\Database\Connectors\ConnectionFactory;
-use Illuminate\Database\Eloquent\Factory as EloquentFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\QueueEntityResolver;
 use Illuminate\Support\ServiceProvider;
@@ -42,9 +43,7 @@ class DatabaseServiceProvider extends ServiceProvider
         Model::clearBootedModels();
 
         $this->registerConnectionServices();
-
-        $this->registerEloquentFactory();
-
+        $this->registerFakerGenerator();
         $this->registerQueueableEntityResolver();
     }
 
@@ -72,15 +71,35 @@ class DatabaseServiceProvider extends ServiceProvider
         $this->app->bind('db.connection', function ($app) {
             return $app['db']->connection();
         });
+
+        $this->app->bind('db.schema', function ($app) {
+            return $app['db']->connection()->getSchemaBuilder();
+        });
+
+        $this->app->singleton('db.transactions', function () {
+            return new DatabaseTransactionsManager;
+        });
+
+        $this->app->singleton(ConcurrencyErrorDetectorContract::class, function () {
+            return new ConcurrencyErrorDetector;
+        });
+
+        $this->app->singleton(LostConnectionDetectorContract::class, function () {
+            return new LostConnectionDetector;
+        });
     }
 
     /**
-     * Register the Eloquent factory instance in the container.
+     * Register the Faker Generator instance in the container.
      *
      * @return void
      */
-    protected function registerEloquentFactory()
+    protected function registerFakerGenerator()
     {
+        if (! class_exists(FakerGenerator::class)) {
+            return;
+        }
+
         $this->app->singleton(FakerGenerator::class, function ($app, $parameters) {
             $locale = $parameters['locale'] ?? $app['config']->get('app.faker_locale', 'en_US');
 
@@ -91,12 +110,6 @@ class DatabaseServiceProvider extends ServiceProvider
             static::$fakers[$locale]->unique(true);
 
             return static::$fakers[$locale];
-        });
-
-        $this->app->singleton(EloquentFactory::class, function ($app) {
-            return EloquentFactory::construct(
-                $app->make(FakerGenerator::class), $this->app->databasePath('factories')
-            );
         });
     }
 

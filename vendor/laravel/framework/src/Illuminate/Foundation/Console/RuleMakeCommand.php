@@ -3,15 +3,20 @@
 namespace Illuminate\Foundation\Console;
 
 use Illuminate\Console\GeneratorCommand;
+use Symfony\Component\Console\Attribute\AsCommand;
 
+#[AsCommand(name: 'make:rule')]
 class RuleMakeCommand extends GeneratorCommand
 {
     /**
-     * The console command name.
+     * The name and signature of the console command.
      *
      * @var string
      */
-    protected $name = 'make:rule';
+    protected $signature = 'make:rule
+                    {name : The name of the rule}
+                    {--f|force : Create the class even if the rule already exists}
+                    {--i|implicit : Generate an implicit rule}';
 
     /**
      * The console command description.
@@ -28,13 +33,36 @@ class RuleMakeCommand extends GeneratorCommand
     protected $type = 'Rule';
 
     /**
+     * Build the class with the given name.
+     *
+     * @param  string  $name
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    protected function buildClass($name)
+    {
+        return str_replace(
+            '{{ ruleType }}',
+            $this->option('implicit') ? 'ImplicitRule' : 'Rule',
+            parent::buildClass($name)
+        );
+    }
+
+    /**
      * Get the stub file for the generator.
      *
      * @return string
      */
     protected function getStub()
     {
-        return __DIR__.'/stubs/rule.stub';
+        $stub = $this->option('implicit')
+            ? '/stubs/rule.implicit.stub'
+            : '/stubs/rule.stub';
+
+        return file_exists($customPath = $this->laravel->basePath(trim($stub, '/')))
+            ? $customPath
+            : __DIR__.$stub;
     }
 
     /**

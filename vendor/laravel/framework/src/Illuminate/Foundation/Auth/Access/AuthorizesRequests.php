@@ -5,13 +5,15 @@ namespace Illuminate\Foundation\Auth\Access;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Support\Str;
 
+use function Illuminate\Support\enum_value;
+
 trait AuthorizesRequests
 {
     /**
      * Authorize a given action for the current user.
      *
      * @param  mixed  $ability
-     * @param  mixed|array  $arguments
+     * @param  mixed  $arguments
      * @return \Illuminate\Auth\Access\Response
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -28,7 +30,7 @@ trait AuthorizesRequests
      *
      * @param  \Illuminate\Contracts\Auth\Authenticatable|mixed  $user
      * @param  mixed  $ability
-     * @param  mixed|array  $arguments
+     * @param  mixed  $arguments
      * @return \Illuminate\Auth\Access\Response
      *
      * @throws \Illuminate\Auth\Access\AuthorizationException
@@ -44,12 +46,14 @@ trait AuthorizesRequests
      * Guesses the ability's name if it wasn't provided.
      *
      * @param  mixed  $ability
-     * @param  mixed|array  $arguments
+     * @param  mixed  $arguments
      * @return array
      */
     protected function parseAbilityAndArguments($ability, $arguments)
     {
-        if (is_string($ability) && strpos($ability, '\\') === false) {
+        $ability = enum_value($ability);
+
+        if (is_string($ability) && ! str_contains($ability, '\\')) {
             return [$ability, $arguments];
         }
 
@@ -74,14 +78,18 @@ trait AuthorizesRequests
     /**
      * Authorize a resource action based on the incoming request.
      *
-     * @param  string  $model
-     * @param  string|null  $parameter
+     * @param  string|array  $model
+     * @param  string|array|null  $parameter
      * @param  array  $options
      * @param  \Illuminate\Http\Request|null  $request
      * @return void
      */
     public function authorizeResource($model, $parameter = null, array $options = [], $request = null)
     {
+        $model = is_array($model) ? implode(',', $model) : $model;
+
+        $parameter = is_array($parameter) ? implode(',', $parameter) : $parameter;
+
         $parameter = $parameter ?: Str::snake(class_basename($model));
 
         $middleware = [];
@@ -100,7 +108,7 @@ trait AuthorizesRequests
     /**
      * Get the map of resource methods to ability names.
      *
-     * @return array
+     * @return array<string, string>
      */
     protected function resourceAbilityMap()
     {
@@ -118,7 +126,7 @@ trait AuthorizesRequests
     /**
      * Get the list of resource methods which do not have model parameters.
      *
-     * @return array
+     * @return list<string>
      */
     protected function resourceMethodsWithoutModels()
     {

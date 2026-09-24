@@ -4,9 +4,8 @@ namespace Illuminate\Validation;
 
 use Closure;
 use Illuminate\Database\ConnectionResolverInterface;
-use Illuminate\Support\Str;
 
-class DatabasePresenceVerifier implements PresenceVerifierInterface
+class DatabasePresenceVerifier implements DatabasePresenceVerifierInterface
 {
     /**
      * The database connection instance.
@@ -26,7 +25,6 @@ class DatabasePresenceVerifier implements PresenceVerifierInterface
      * Create a new database presence verifier.
      *
      * @param  \Illuminate\Database\ConnectionResolverInterface  $db
-     * @return void
      */
     public function __construct(ConnectionResolverInterface $db)
     {
@@ -107,7 +105,7 @@ class DatabasePresenceVerifier implements PresenceVerifierInterface
             $query->whereNull($key);
         } elseif ($extraValue === 'NOT_NULL') {
             $query->whereNotNull($key);
-        } elseif (Str::startsWith($extraValue, '!')) {
+        } elseif (str_starts_with($extraValue, '!')) {
             $query->where($key, '!=', mb_substr($extraValue, 1));
         } else {
             $query->where($key, $extraValue);
@@ -120,7 +118,7 @@ class DatabasePresenceVerifier implements PresenceVerifierInterface
      * @param  string  $table
      * @return \Illuminate\Database\Query\Builder
      */
-    public function table($table)
+    protected function table($table)
     {
         return $this->db->connection($this->connection)->table($table)->useWritePdo();
     }

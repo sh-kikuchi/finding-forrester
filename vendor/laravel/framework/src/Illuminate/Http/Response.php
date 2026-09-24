@@ -7,13 +7,46 @@ use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
 use JsonSerializable;
-use Symfony\Component\HttpFoundation\Response as BaseResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
-class Response extends BaseResponse
+class Response extends SymfonyResponse
 {
     use ResponseTrait, Macroable {
         Macroable::__call as macroCall;
+    }
+
+    /**
+     * Create a new HTTP response.
+     *
+     * @param  mixed  $content
+     * @param  int  $status
+     * @param  array  $headers
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function __construct($content = '', $status = 200, array $headers = [])
+    {
+        if (method_exists($this, 'setHeaders')) {
+            parent::__construct('', $status, new ResponseHeaderBag($headers));
+        } else {
+            $this->headers = new ResponseHeaderBag($headers);
+            $this->setStatusCode($status);
+            $this->setProtocolVersion('1.0');
+        }
+
+        $this->setContent($content);
+    }
+
+    /**
+     * Get the response content.
+     */
+    #[\Override]
+    public function getContent(): string|false
+    {
+        return transform(parent::getContent(), fn ($content) => $content, '');
     }
 
     /**
@@ -21,8 +54,11 @@ class Response extends BaseResponse
      *
      * @param  mixed  $content
      * @return $this
+     *
+     * @throws \InvalidArgumentException
      */
-    public function setContent($content)
+    #[\Override]
+    public function setContent(mixed $content): static
     {
         $this->original = $content;
 
@@ -33,6 +69,10 @@ class Response extends BaseResponse
             $this->header('Content-Type', 'application/json');
 
             $content = $this->morphToJson($content);
+
+            if ($content === false) {
+                throw new InvalidArgumentException(json_last_error_msg());
+            }
         }
 
         // If this content implements the "Renderable" interface then we will call the
@@ -66,7 +106,7 @@ class Response extends BaseResponse
      * Morph the given content into JSON.
      *
      * @param  mixed  $content
-     * @return string
+     * @return string|false
      */
     protected function morphToJson($content)
     {

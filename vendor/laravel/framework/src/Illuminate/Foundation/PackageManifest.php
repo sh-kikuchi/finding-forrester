@@ -4,6 +4,8 @@ namespace Illuminate\Foundation;
 
 use Exception;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Env;
 
 class PackageManifest
 {
@@ -48,14 +50,13 @@ class PackageManifest
      * @param  \Illuminate\Filesystem\Filesystem  $files
      * @param  string  $basePath
      * @param  string  $manifestPath
-     * @return void
      */
     public function __construct(Filesystem $files, $basePath, $manifestPath)
     {
         $this->files = $files;
         $this->basePath = $basePath;
         $this->manifestPath = $manifestPath;
-        $this->vendorPath = $basePath.'/vendor';
+        $this->vendorPath = Env::get('COMPOSER_VENDOR_DIR') ?: $basePath.'/vendor';
     }
 
     /**
@@ -86,9 +87,10 @@ class PackageManifest
      */
     public function config($key)
     {
-        return collect($this->getManifest())->flatMap(function ($configuration) use ($key) {
-            return (array) ($configuration[$key] ?? []);
-        })->filter()->all();
+        return (new Collection($this->getManifest()))
+            ->flatMap(fn ($configuration) => (array) ($configuration[$key] ?? []))
+            ->filter()
+            ->all();
     }
 
     /**
@@ -102,11 +104,11 @@ class PackageManifest
             return $this->manifest;
         }
 
-        if (! file_exists($this->manifestPath)) {
+        if (! is_file($this->manifestPath)) {
             $this->build();
         }
 
-        return $this->manifest = file_exists($this->manifestPath) ?
+        return $this->manifest = is_file($this->manifestPath) ?
             $this->files->getRequire($this->manifestPath) : [];
     }
 
@@ -127,13 +129,13 @@ class PackageManifest
 
         $ignoreAll = in_array('*', $ignore = $this->packagesToIgnore());
 
-        $this->write(collect($packages)->mapWithKeys(function ($package) {
+        $this->write((new Collection($packages))->mapWithKeys(function ($package) {
             return [$this->format($package['name']) => $package['extra']['laravel'] ?? []];
         })->each(function ($configuration) use (&$ignore) {
             $ignore = array_merge($ignore, $configuration['dont-discover'] ?? []);
         })->reject(function ($configuration, $package) use ($ignore, $ignoreAll) {
-            return $ignoreAll || in_array($package, $ignore);
-        })->filter()->all());
+            return $ignoreAll || in_array($package, $ignore) || empty($configuration);
+        })->all());
     }
 
     /**
@@ -154,7 +156,7 @@ class PackageManifest
      */
     protected function packagesToIgnore()
     {
-        if (! file_exists($this->basePath.'/composer.json')) {
+        if (! is_file($this->basePath.'/composer.json')) {
             return [];
         }
 
@@ -173,8 +175,8 @@ class PackageManifest
      */
     protected function write(array $manifest)
     {
-        if (! is_writable(dirname($this->manifestPath))) {
-            throw new Exception('The '.dirname($this->manifestPath).' directory must be present and writable.');
+        if (! is_writable($dirname = dirname($this->manifestPath))) {
+            throw new Exception("The {$dirname} directory must be present and writable.");
         }
 
         $this->files->replace(

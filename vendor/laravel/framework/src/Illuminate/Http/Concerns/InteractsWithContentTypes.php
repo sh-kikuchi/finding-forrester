@@ -7,24 +7,6 @@ use Illuminate\Support\Str;
 trait InteractsWithContentTypes
 {
     /**
-     * Determine if the given content types match.
-     *
-     * @param  string  $actual
-     * @param  string  $type
-     * @return bool
-     */
-    public static function matchesType($actual, $type)
-    {
-        if ($actual === $type) {
-            return true;
-        }
-
-        $split = explode('/', $actual);
-
-        return isset($split[1]) && preg_match('#'.preg_quote($split[0], '#').'/.+\+'.preg_quote($split[1], '#').'#', $type);
-    }
-
-    /**
      * Determine if the request is sending JSON.
      *
      * @return bool
@@ -53,7 +35,19 @@ trait InteractsWithContentTypes
     {
         $acceptable = $this->getAcceptableContentTypes();
 
-        return isset($acceptable[0]) && Str::contains($acceptable[0], ['/json', '+json']);
+        return isset($acceptable[0]) && Str::contains(strtolower($acceptable[0]), ['/json', '+json']);
+    }
+
+    /**
+     * Determine if the current request is asking for Markdown.
+     *
+     * @return bool
+     */
+    public function wantsMarkdown()
+    {
+        $acceptable = $this->getAcceptableContentTypes();
+
+        return isset($acceptable[0]) && str_starts_with(strtolower($acceptable[0]), 'text/markdown');
     }
 
     /**
@@ -73,12 +67,20 @@ trait InteractsWithContentTypes
         $types = (array) $contentTypes;
 
         foreach ($accepts as $accept) {
+            if ($accept && $pos = strpos($accept, ';')) {
+                $accept = trim(substr($accept, 0, $pos));
+            }
+
             if ($accept === '*/*' || $accept === '*') {
                 return true;
             }
 
             foreach ($types as $type) {
-                if ($this->matchesType($accept, $type) || $accept === strtok($type, '/').'/*') {
+                $accept = strtolower($accept);
+
+                $type = strtolower($type);
+
+                if (self::matchesType($accept, $type) || $accept === strtok($type, '/').'/*') {
                     return true;
                 }
             }
@@ -100,6 +102,10 @@ trait InteractsWithContentTypes
         $contentTypes = (array) $contentTypes;
 
         foreach ($accepts as $accept) {
+            if ($accept && $pos = strpos($accept, ';')) {
+                $accept = trim(substr($accept, 0, $pos));
+            }
+
             if (in_array($accept, ['*/*', '*'])) {
                 return $contentTypes[0];
             }
@@ -111,7 +117,11 @@ trait InteractsWithContentTypes
                     $type = $mimeType;
                 }
 
-                if ($this->matchesType($type, $accept) || $accept === strtok($type, '/').'/*') {
+                $accept = strtolower($accept);
+
+                $type = strtolower($type);
+
+                if (self::matchesType($type, $accept) || $accept === strtok($type, '/').'/*') {
                     return $contentType;
                 }
             }
@@ -143,6 +153,16 @@ trait InteractsWithContentTypes
     }
 
     /**
+     * Determines whether a request accepts Markdown.
+     *
+     * @return bool
+     */
+    public function acceptsMarkdown()
+    {
+        return $this->accepts('text/markdown');
+    }
+
+    /**
      * Determines whether a request accepts HTML.
      *
      * @return bool
@@ -150,6 +170,24 @@ trait InteractsWithContentTypes
     public function acceptsHtml()
     {
         return $this->accepts('text/html');
+    }
+
+    /**
+     * Determine if the given content types match.
+     *
+     * @param  string  $actual
+     * @param  string  $type
+     * @return bool
+     */
+    public static function matchesType($actual, $type)
+    {
+        if ($actual === $type) {
+            return true;
+        }
+
+        $split = explode('/', $actual);
+
+        return isset($split[1]) && preg_match('#'.preg_quote($split[0], '#').'/.+\+'.preg_quote($split[1], '#').'#', $type);
     }
 
     /**

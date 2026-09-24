@@ -2,6 +2,8 @@
 
 namespace Illuminate\Cache;
 
+use Illuminate\Support\Collection;
+
 trait RetrievesMultipleKeys
 {
     /**
@@ -16,8 +18,13 @@ trait RetrievesMultipleKeys
     {
         $return = [];
 
-        foreach ($keys as $key) {
-            $return[$key] = $this->get($key);
+        $keys = (new Collection($keys))
+            ->mapWithKeys(fn ($value, $key) => [is_string($key) ? $key : $value => is_string($key) ? $value : null])
+            ->all();
+
+        foreach ($keys as $key => $default) {
+            /** @phpstan-ignore arguments.count (some clients don't accept a default) */
+            $return[$key] = $this->get($key, $default);
         }
 
         return $return;

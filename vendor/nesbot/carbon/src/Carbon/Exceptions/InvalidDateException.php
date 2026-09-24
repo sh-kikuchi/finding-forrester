@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * This file is part of the Carbon package.
  *
@@ -11,8 +13,8 @@
 
 namespace Carbon\Exceptions;
 
-use Exception;
 use InvalidArgumentException as BaseInvalidArgumentException;
+use Throwable;
 
 class InvalidDateException extends BaseInvalidArgumentException implements InvalidArgumentException
 {
@@ -36,9 +38,9 @@ class InvalidDateException extends BaseInvalidArgumentException implements Inval
      * @param string         $field
      * @param mixed          $value
      * @param int            $code
-     * @param Exception|null $previous
+     * @param Throwable|null $previous
      */
-    public function __construct($field, $value, $code = 0, Exception $previous = null)
+    public function __construct($field, $value, $code = 0, ?Throwable $previous = null)
     {
         $this->field = $field;
         $this->value = $value;

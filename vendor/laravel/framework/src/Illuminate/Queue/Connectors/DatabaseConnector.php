@@ -18,7 +18,6 @@ class DatabaseConnector implements ConnectorInterface
      * Create a new connector instance.
      *
      * @param  \Illuminate\Database\ConnectionResolverInterface  $connections
-     * @return void
      */
     public function __construct(ConnectionResolverInterface $connections)
     {
@@ -37,7 +36,8 @@ class DatabaseConnector implements ConnectorInterface
             $this->connections->connection($config['connection'] ?? null),
             $config['table'],
             $config['queue'],
-            $config['retry_after'] ?? 60
+            $config['retry_after'] ?? 60,
+            $config['after_commit'] ?? null
         );
     }
 }

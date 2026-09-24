@@ -23,10 +23,18 @@ class PaginatedResourceResponse extends ResourceResponse
                     $this->resource->additional
                 )
             ),
-            $this->calculateStatus()
+            $this->calculateStatus(),
+            [],
+            $this->resource->jsonOptions()
         ), function ($response) use ($request) {
             $response->original = $this->resource->resource->map(function ($item) {
-                return $item->resource;
+                if (is_array($item)) {
+                    return Arr::get($item, 'resource');
+                } elseif (is_object($item)) {
+                    return $item->resource ?? null;
+                }
+
+                return null;
             });
 
             $this->resource->withResponse($request, $response);
@@ -43,10 +51,17 @@ class PaginatedResourceResponse extends ResourceResponse
     {
         $paginated = $this->resource->resource->toArray();
 
-        return [
+        $default = [
             'links' => $this->paginationLinks($paginated),
             'meta' => $this->meta($paginated),
         ];
+
+        if (method_exists($this->resource, 'paginationInformation') ||
+            $this->resource->hasMacro('paginationInformation')) {
+            return $this->resource->paginationInformation($request, $paginated, $default);
+        }
+
+        return $default;
     }
 
     /**
@@ -66,7 +81,7 @@ class PaginatedResourceResponse extends ResourceResponse
     }
 
     /**
-     * Gather the meta data for the response.
+     * Gather the metadata for the response.
      *
      * @param  array  $paginated
      * @return array

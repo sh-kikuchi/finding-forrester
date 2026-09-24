@@ -11,7 +11,9 @@
 
 namespace Symfony\Component\HttpKernel\DependencyInjection;
 
-use Symfony\Contracts\Service\ResetInterface;
+use Symfony\Component\DependencyInjection\ServicesResetter as BaseServicesResetter;
+
+trigger_deprecation('symfony/http-kernel', '8.1', 'The "%s" class is deprecated, use "%s" from the DependencyInjection component instead.', ServicesResetter::class, BaseServicesResetter::class);
 
 /**
  * Resets provided services.
@@ -19,25 +21,8 @@ use Symfony\Contracts\Service\ResetInterface;
  * @author Alexander M. Turek <me@derrabus.de>
  * @author Nicolas Grekas <p@tchwork.com>
  *
- * @internal
+ * @deprecated since Symfony 8.1, use ServicesResetter from the DependencyInjection component instead
  */
-class ServicesResetter implements ResetInterface
+final class ServicesResetter extends BaseServicesResetter implements ServicesResetterInterface
 {
-    private $resettableServices;
-    private $resetMethods;
-
-    public function __construct(\Traversable $resettableServices, array $resetMethods)
-    {
-        $this->resettableServices = $resettableServices;
-        $this->resetMethods = $resetMethods;
-    }
-
-    public function reset()
-    {
-        foreach ($this->resettableServices as $id => $service) {
-            foreach ((array) $this->resetMethods[$id] as $resetMethod) {
-                $service->$resetMethod();
-            }
-        }
-    }
 }

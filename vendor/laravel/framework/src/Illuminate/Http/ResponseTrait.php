@@ -2,9 +2,9 @@
 
 namespace Illuminate\Http;
 
-use Exception;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Symfony\Component\HttpFoundation\HeaderBag;
+use Throwable;
 
 trait ResponseTrait
 {
@@ -18,7 +18,7 @@ trait ResponseTrait
     /**
      * The exception that triggered the error response (if applicable).
      *
-     * @var \Exception|null
+     * @var \Throwable|null
      */
     public $exception;
 
@@ -30,6 +30,16 @@ trait ResponseTrait
     public function status()
     {
         return $this->getStatusCode();
+    }
+
+    /**
+     * Get the status text for the response.
+     *
+     * @return string
+     */
+    public function statusText()
+    {
+        return $this->statusText;
     }
 
     /**
@@ -89,6 +99,21 @@ trait ResponseTrait
     }
 
     /**
+     * Remove a header(s) from the response.
+     *
+     * @param  array|string  $key
+     * @return $this
+     */
+    public function withoutHeader($key)
+    {
+        foreach ((array) $key as $header) {
+            $this->headers->remove($header);
+        }
+
+        return $this;
+    }
+
+    /**
      * Add a cookie to the response.
      *
      * @param  \Symfony\Component\HttpFoundation\Cookie|mixed  $cookie
@@ -117,6 +142,57 @@ trait ResponseTrait
     }
 
     /**
+     * Add multiple cookies to the response.
+     *
+     * @param  array  $cookies
+     * @return $this
+     */
+    public function withCookies(array $cookies)
+    {
+        foreach ($cookies as $cookie) {
+            $this->headers->setCookie($cookie);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Expire a cookie when sending the response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Cookie|mixed  $cookie
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @return $this
+     */
+    public function withoutCookie($cookie, $path = null, $domain = null)
+    {
+        if (is_string($cookie) && function_exists('cookie')) {
+            $cookie = cookie($cookie, null, -2628000, $path, $domain);
+        }
+
+        $this->headers->setCookie($cookie);
+
+        return $this;
+    }
+
+    /**
+     * Expire multiple cookies when sending the response.
+     *
+     * @param  array  $cookies
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @return $this
+     */
+    public function withoutCookies(array $cookies, $path = null, $domain = null)
+    {
+        foreach ($cookies as $cookie) {
+            $this->withoutCookie($cookie, $path, $domain);
+        }
+
+        return $this;
+    }
+
+    /**
      * Get the callback of the response.
      *
      * @return string|null
@@ -129,10 +205,10 @@ trait ResponseTrait
     /**
      * Set the exception to attach to the response.
      *
-     * @param  \Exception  $e
+     * @param  \Throwable  $e
      * @return $this
      */
-    public function withException(Exception $e)
+    public function withException(Throwable $e)
     {
         $this->exception = $e;
 
@@ -142,7 +218,7 @@ trait ResponseTrait
     /**
      * Throws the response in a HttpResponseException instance.
      *
-     * @return void
+     * @return never
      *
      * @throws \Illuminate\Http\Exceptions\HttpResponseException
      */

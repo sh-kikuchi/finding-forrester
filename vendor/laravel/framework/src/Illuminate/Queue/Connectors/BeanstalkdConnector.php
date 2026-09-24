@@ -3,8 +3,9 @@
 namespace Illuminate\Queue\Connectors;
 
 use Illuminate\Queue\BeanstalkdQueue;
-use Pheanstalk\Connection;
+use Pheanstalk\Contract\SocketFactoryInterface;
 use Pheanstalk\Pheanstalk;
+use Pheanstalk\Values\Timeout;
 
 class BeanstalkdConnector implements ConnectorInterface
 {
@@ -20,7 +21,8 @@ class BeanstalkdConnector implements ConnectorInterface
             $this->pheanstalk($config),
             $config['queue'],
             $config['retry_after'] ?? Pheanstalk::DEFAULT_TTR,
-            $config['block_for'] ?? 0
+            $config['block_for'] ?? 0,
+            $config['after_commit'] ?? null
         );
     }
 
@@ -34,8 +36,8 @@ class BeanstalkdConnector implements ConnectorInterface
     {
         return Pheanstalk::create(
             $config['host'],
-            $config['port'] ?? Pheanstalk::DEFAULT_PORT,
-            $config['timeout'] ?? Connection::DEFAULT_CONNECT_TIMEOUT
+            $config['port'] ?? SocketFactoryInterface::DEFAULT_PORT,
+            isset($config['timeout']) ? new Timeout($config['timeout']) : null,
         );
     }
 }

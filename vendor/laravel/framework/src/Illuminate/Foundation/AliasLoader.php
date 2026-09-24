@@ -36,7 +36,6 @@ class AliasLoader
      * Create a new AliasLoader instance.
      *
      * @param  array  $aliases
-     * @return void
      */
     private function __construct($aliases)
     {
@@ -70,7 +69,7 @@ class AliasLoader
      */
     public function load($alias)
     {
-        if (static::$facadeNamespace && strpos($alias, static::$facadeNamespace) === 0) {
+        if (static::$facadeNamespace && str_starts_with($alias, static::$facadeNamespace)) {
             $this->loadFacade($alias);
 
             return true;
@@ -100,13 +99,23 @@ class AliasLoader
      */
     protected function ensureFacadeExists($alias)
     {
-        if (file_exists($path = storage_path('framework/cache/facade-'.sha1($alias).'.php'))) {
+        if (is_file($path = storage_path('framework/cache/facade-'.sha1($alias).'.php'))) {
             return $path;
         }
 
-        file_put_contents($path, $this->formatFacadeStub(
+        $stub = $this->formatFacadeStub(
             $alias, file_get_contents(__DIR__.'/stubs/facade.stub')
-        ));
+        );
+
+        // Atomic write to prevent race conditions...
+        $tempPath = tempnam(dirname($path), 'facade-');
+
+        // Fix permissions of tempPath because `tempnam()` creates it with permissions set to 0600...
+        @chmod($tempPath, 0777 - umask());
+
+        file_put_contents($tempPath, $stub);
+
+        rename($tempPath, $path);
 
         return $path;
     }
@@ -134,13 +143,13 @@ class AliasLoader
     /**
      * Add an alias to the loader.
      *
-     * @param  string  $class
      * @param  string  $alias
+     * @param  string  $class
      * @return void
      */
-    public function alias($class, $alias)
+    public function alias($alias, $class)
     {
-        $this->aliases[$class] = $alias;
+        $this->aliases[$alias] = $class;
     }
 
     /**
@@ -164,7 +173,7 @@ class AliasLoader
      */
     protected function prependToLoaderStack()
     {
-        spl_autoload_register([$this, 'load'], true, true);
+        spl_autoload_register($this->load(...), true, true);
     }
 
     /**

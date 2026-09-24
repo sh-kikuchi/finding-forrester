@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * This file is part of the Carbon package.
  *
@@ -11,8 +13,8 @@
 
 namespace Carbon\Exceptions;
 
-use Exception;
 use InvalidArgumentException as BaseInvalidArgumentException;
+use Throwable;
 
 class NotLocaleAwareException extends BaseInvalidArgumentException implements InvalidArgumentException
 {
@@ -21,9 +23,9 @@ class NotLocaleAwareException extends BaseInvalidArgumentException implements In
      *
      * @param mixed          $object
      * @param int            $code
-     * @param Exception|null $previous
+     * @param Throwable|null $previous
      */
-    public function __construct($object, $code = 0, Exception $previous = null)
+    public function __construct($object, $code = 0, ?Throwable $previous = null)
     {
         $dump = \is_object($object) ? \get_class($object) : \gettype($object);
 

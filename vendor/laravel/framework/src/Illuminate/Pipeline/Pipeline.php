@@ -3,19 +3,22 @@
 namespace Illuminate\Pipeline;
 
 use Closure;
-use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Pipeline\Pipeline as PipelineContract;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use RuntimeException;
-use Symfony\Component\Debug\Exception\FatalThrowableError;
 use Throwable;
 
 class Pipeline implements PipelineContract
 {
+    use Conditionable;
+    use Macroable;
+
     /**
      * The container implementation.
      *
-     * @var \Illuminate\Contracts\Container\Container
+     * @var \Illuminate\Contracts\Container\Container|null
      */
     protected $container;
 
@@ -41,12 +44,25 @@ class Pipeline implements PipelineContract
     protected $method = 'handle';
 
     /**
+     * The final callback to be executed after the pipeline ends regardless of the outcome.
+     *
+     * @var \Closure|null
+     */
+    protected $finally;
+
+    /**
+     * Indicates whether to wrap the pipeline in a database transaction.
+     *
+     * @var string|null|\UnitEnum|false
+     */
+    protected $withinTransaction = false;
+
+    /**
      * Create a new class instance.
      *
      * @param  \Illuminate\Contracts\Container\Container|null  $container
-     * @return void
      */
-    public function __construct(Container $container = null)
+    public function __construct(?Container $container = null)
     {
         $this->container = $container;
     }
@@ -67,12 +83,25 @@ class Pipeline implements PipelineContract
     /**
      * Set the array of pipes.
      *
-     * @param  array|mixed  $pipes
+     * @param  mixed  $pipes
      * @return $this
      */
     public function through($pipes)
     {
         $this->pipes = is_array($pipes) ? $pipes : func_get_args();
+
+        return $this;
+    }
+
+    /**
+     * Push additional pipes onto the pipeline.
+     *
+     * @param  mixed  $pipes
+     * @return $this
+     */
+    public function pipe($pipes)
+    {
+        array_push($this->pipes, ...(is_array($pipes) ? $pipes : func_get_args()));
 
         return $this;
     }
@@ -102,7 +131,15 @@ class Pipeline implements PipelineContract
             array_reverse($this->pipes()), $this->carry(), $this->prepareDestination($destination)
         );
 
-        return $pipeline($this->passable);
+        try {
+            return $this->withinTransaction !== false
+                ? $this->getContainer()->make('db')->connection($this->withinTransaction)->transaction(fn () => $pipeline($this->passable))
+                : $pipeline($this->passable);
+        } finally {
+            if ($this->finally) {
+                ($this->finally)($this->passable);
+            }
+        }
     }
 
     /**
@@ -118,6 +155,19 @@ class Pipeline implements PipelineContract
     }
 
     /**
+     * Set a final callback to be executed after the pipeline ends regardless of the outcome.
+     *
+     * @param  \Closure  $callback
+     * @return $this
+     */
+    public function finally(Closure $callback)
+    {
+        $this->finally = $callback;
+
+        return $this;
+    }
+
+    /**
      * Get the final piece of the Closure onion.
      *
      * @param  \Closure  $destination
@@ -128,10 +178,8 @@ class Pipeline implements PipelineContract
         return function ($passable) use ($destination) {
             try {
                 return $destination($passable);
-            } catch (Exception $e) {
-                return $this->handleException($passable, $e);
             } catch (Throwable $e) {
-                return $this->handleException($passable, new FatalThrowableError($e));
+                return $this->handleException($passable, $e);
             }
         };
     }
@@ -168,14 +216,12 @@ class Pipeline implements PipelineContract
                     }
 
                     $carry = method_exists($pipe, $this->method)
-                                    ? $pipe->{$this->method}(...$parameters)
-                                    : $pipe(...$parameters);
+                        ? $pipe->{$this->method}(...$parameters)
+                        : $pipe(...$parameters);
 
                     return $this->handleCarry($carry);
-                } catch (Exception $e) {
-                    return $this->handleException($passable, $e);
                 } catch (Throwable $e) {
-                    return $this->handleException($passable, new FatalThrowableError($e));
+                    return $this->handleException($passable, $e);
                 }
             };
         };
@@ -189,10 +235,12 @@ class Pipeline implements PipelineContract
      */
     protected function parsePipeString($pipe)
     {
-        [$name, $parameters] = array_pad(explode(':', $pipe, 2), 2, []);
+        [$name, $parameters] = array_pad(explode(':', $pipe, 2), 2, null);
 
-        if (is_string($parameters)) {
+        if (! is_null($parameters)) {
             $parameters = explode(',', $parameters);
+        } else {
+            $parameters = [];
         }
 
         return [$name, $parameters];
@@ -206,6 +254,19 @@ class Pipeline implements PipelineContract
     protected function pipes()
     {
         return $this->pipes;
+    }
+
+    /**
+     * Execute each pipeline step within a database transaction.
+     *
+     * @param  string|null|\UnitEnum|false  $withinTransaction
+     * @return $this
+     */
+    public function withinTransaction($withinTransaction = null)
+    {
+        $this->withinTransaction = $withinTransaction;
+
+        return $this;
     }
 
     /**
@@ -225,6 +286,19 @@ class Pipeline implements PipelineContract
     }
 
     /**
+     * Set the container instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @return $this
+     */
+    public function setContainer(Container $container)
+    {
+        $this->container = $container;
+
+        return $this;
+    }
+
+    /**
      * Handle the value returned from each pipe before passing it to the next.
      *
      * @param  mixed  $carry
@@ -239,12 +313,12 @@ class Pipeline implements PipelineContract
      * Handle the given exception.
      *
      * @param  mixed  $passable
-     * @param  \Exception  $e
+     * @param  \Throwable  $e
      * @return mixed
      *
-     * @throws \Exception
+     * @throws \Throwable
      */
-    protected function handleException($passable, Exception $e)
+    protected function handleException($passable, Throwable $e)
     {
         throw $e;
     }

@@ -4,18 +4,29 @@ namespace Illuminate\Database\Console\Migrations;
 
 use Illuminate\Console\Command;
 use Illuminate\Console\ConfirmableTrait;
-use Symfony\Component\Console\Input\InputOption;
+use Illuminate\Console\Prohibitable;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Events\DatabaseRefreshed;
+use Symfony\Component\Console\Attribute\AsCommand;
 
+#[AsCommand(name: 'migrate:refresh')]
 class RefreshCommand extends Command
 {
-    use ConfirmableTrait;
+    use ConfirmableTrait, Prohibitable;
 
     /**
-     * The console command name.
+     * The name and signature of the console command.
      *
      * @var string
      */
-    protected $name = 'migrate:refresh';
+    protected $signature = 'migrate:refresh
+                    {--database= : The database connection to use}
+                    {--force : Force the operation to run when in production}
+                    {--path=* : The path(s) to the migrations files to be executed}
+                    {--realpath : Indicate any provided migration file paths are pre-resolved absolute paths}
+                    {--seed : Indicates if the seed task should be re-run}
+                    {--seeder= : The class name of the root seeder}
+                    {--step= : The number of migrations to be reverted & re-run}';
 
     /**
      * The console command description.
@@ -27,12 +38,12 @@ class RefreshCommand extends Command
     /**
      * Execute the console command.
      *
-     * @return void
+     * @return int
      */
     public function handle()
     {
-        if (! $this->confirmToProceed()) {
-            return;
+        if ($this->isProhibited() || ! $this->confirmToProceed()) {
+            return self::FAILURE;
         }
 
         // Next we'll gather some of the options so that we can have the right options
@@ -63,9 +74,17 @@ class RefreshCommand extends Command
             '--force' => true,
         ]));
 
+        if ($this->laravel->bound(Dispatcher::class)) {
+            $this->laravel[Dispatcher::class]->dispatch(
+                new DatabaseRefreshed($database, $this->needsSeeding())
+            );
+        }
+
         if ($this->needsSeeding()) {
             $this->runSeeder($database);
         }
+
+        return self::SUCCESS;
     }
 
     /**
@@ -124,26 +143,8 @@ class RefreshCommand extends Command
     {
         $this->call('db:seed', array_filter([
             '--database' => $database,
-            '--class' => $this->option('seeder') ?: 'DatabaseSeeder',
+            '--class' => $this->option('seeder') ?: 'Database\\Seeders\\DatabaseSeeder',
             '--force' => true,
         ]));
-    }
-
-    /**
-     * Get the console command options.
-     *
-     * @return array
-     */
-    protected function getOptions()
-    {
-        return [
-            ['database', null, InputOption::VALUE_OPTIONAL, 'The database connection to use'],
-            ['force', null, InputOption::VALUE_NONE, 'Force the operation to run when in production'],
-            ['path', null, InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY, 'The path(s) to the migrations files to be executed'],
-            ['realpath', null, InputOption::VALUE_NONE, 'Indicate any provided migration file paths are pre-resolved absolute paths'],
-            ['seed', null, InputOption::VALUE_NONE, 'Indicates if the seed task should be re-run'],
-            ['seeder', null, InputOption::VALUE_OPTIONAL, 'The class name of the root seeder'],
-            ['step', null, InputOption::VALUE_OPTIONAL, 'The number of migrations to be reverted & re-run'],
-        ];
     }
 }

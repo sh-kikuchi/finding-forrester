@@ -2,18 +2,25 @@
 
 namespace Illuminate\Foundation\Console;
 
+use Illuminate\Console\Concerns\CreatesMatchingTest;
 use Illuminate\Console\GeneratorCommand;
-use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputOption;
+use Illuminate\Support\Stringable;
+use Symfony\Component\Console\Attribute\AsCommand;
 
+#[AsCommand(name: 'make:command')]
 class ConsoleMakeCommand extends GeneratorCommand
 {
+    use CreatesMatchingTest;
+
     /**
-     * The console command name.
+     * The name and signature of the console command.
      *
      * @var string
      */
-    protected $name = 'make:command';
+    protected $signature = 'make:command
+                    {name : The name of the command}
+                    {--f|force : Create the class even if the console command already exists}
+                    {--command= : The terminal command that will be used to invoke the class}';
 
     /**
      * The console command description.
@@ -40,7 +47,9 @@ class ConsoleMakeCommand extends GeneratorCommand
     {
         $stub = parent::replaceClass($stub, $name);
 
-        return str_replace('dummy:command', $this->option('command'), $stub);
+        $command = $this->option('command') ?: 'app:'.(new Stringable($name))->classBasename()->kebab()->value();
+
+        return str_replace(['dummy:command', '{{ command }}'], $command, $stub);
     }
 
     /**
@@ -50,7 +59,11 @@ class ConsoleMakeCommand extends GeneratorCommand
      */
     protected function getStub()
     {
-        return __DIR__.'/stubs/console.stub';
+        $relativePath = '/stubs/console.stub';
+
+        return file_exists($customPath = $this->laravel->basePath(trim($relativePath, '/')))
+            ? $customPath
+            : __DIR__.$relativePath;
     }
 
     /**
@@ -62,29 +75,5 @@ class ConsoleMakeCommand extends GeneratorCommand
     protected function getDefaultNamespace($rootNamespace)
     {
         return $rootNamespace.'\Console\Commands';
-    }
-
-    /**
-     * Get the console command arguments.
-     *
-     * @return array
-     */
-    protected function getArguments()
-    {
-        return [
-            ['name', InputArgument::REQUIRED, 'The name of the command'],
-        ];
-    }
-
-    /**
-     * Get the console command options.
-     *
-     * @return array
-     */
-    protected function getOptions()
-    {
-        return [
-            ['command', null, InputOption::VALUE_OPTIONAL, 'The terminal command that should be assigned', 'command:name'],
-        ];
     }
 }

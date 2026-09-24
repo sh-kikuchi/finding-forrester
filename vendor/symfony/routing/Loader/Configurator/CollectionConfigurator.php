@@ -20,31 +20,30 @@ use Symfony\Component\Routing\RouteCollection;
 class CollectionConfigurator
 {
     use Traits\AddTrait;
+    use Traits\HostTrait;
+    use Traits\PrefixTrait;
     use Traits\RouteTrait;
 
-    private $parent;
-    private $parentConfigurator;
-    private $parentPrefixes;
+    private string|array|null $host = null;
+    private bool $trailingSlashOnRoot = true;
 
-    public function __construct(RouteCollection $parent, string $name, self $parentConfigurator = null, array $parentPrefixes = null)
-    {
-        $this->parent = $parent;
+    public function __construct(
+        private RouteCollection $parent,
+        string $name,
+        private ?self $parentConfigurator = null, // for GC control
+        private ?array $parentPrefixes = null,
+    ) {
         $this->name = $name;
         $this->collection = new RouteCollection();
         $this->route = new Route('');
-        $this->parentConfigurator = $parentConfigurator; // for GC control
-        $this->parentPrefixes = $parentPrefixes;
     }
 
-    /**
-     * @return array
-     */
-    public function __sleep()
+    public function __serialize(): array
     {
         throw new \BadMethodCallException('Cannot serialize '.__CLASS__);
     }
 
-    public function __wakeup()
+    public function __unserialize(array $data): void
     {
         throw new \BadMethodCallException('Cannot unserialize '.__CLASS__);
     }
@@ -52,7 +51,10 @@ class CollectionConfigurator
     public function __destruct()
     {
         if (null === $this->prefixes) {
-            $this->collection->addPrefix($this->route->getPath());
+            $this->addPrefix($this->collection, $this->route->getPath(), $this->trailingSlashOnRoot);
+        }
+        if (null !== $this->host) {
+            $this->addHost($this->collection, $this->host);
         }
 
         $this->parent->addCollection($this->collection);
@@ -73,17 +75,19 @@ class CollectionConfigurator
      *
      * @return $this
      */
-    final public function prefix($prefix): self
+    final public function prefix(string|array $prefix, bool $trailingSlashOnRoot = true): static
     {
+        $this->trailingSlashOnRoot = $trailingSlashOnRoot;
+
         if (\is_array($prefix)) {
             if (null === $this->parentPrefixes) {
                 // no-op
             } elseif ($missing = array_diff_key($this->parentPrefixes, $prefix)) {
-                throw new \LogicException(sprintf('Collection "%s" is missing prefixes for locale(s) "%s".', $this->name, implode('", "', array_keys($missing))));
+                throw new \LogicException(\sprintf('Collection "%s" is missing prefixes for locale(s) "%s".', $this->name, implode('", "', array_keys($missing))));
             } else {
                 foreach ($prefix as $locale => $localePrefix) {
                     if (!isset($this->parentPrefixes[$locale])) {
-                        throw new \LogicException(sprintf('Collection "%s" with locale "%s" is missing a corresponding prefix in its parent collection.', $this->name, $locale));
+                        throw new \LogicException(\sprintf('Collection "%s" with locale "%s" is missing a corresponding prefix in its parent collection.', $this->name, $locale));
                     }
 
                     $prefix[$locale] = $this->parentPrefixes[$locale].$localePrefix;
@@ -99,8 +103,35 @@ class CollectionConfigurator
         return $this;
     }
 
+    /**
+     * Sets the host to use for all child routes.
+     *
+     * @param string|array $host the host, or the localized hosts
+     *
+     * @return $this
+     */
+    final public function host(string|array $host): static
+    {
+        $this->host = $host;
+
+        return $this;
+    }
+
+    /**
+     * This method overrides the one from LocalizedRouteTrait.
+     */
     private function createRoute(string $path): Route
     {
+        if (!$this->trailingSlashOnRoot && null !== $this->prefixes) {
+            foreach ($this->prefixes as $prefix) {
+                if ($path === $prefix.'/') {
+                    $path = $prefix;
+
+                    break;
+                }
+            }
+        }
+
         return (clone $this->route)->setPath($path);
     }
 }

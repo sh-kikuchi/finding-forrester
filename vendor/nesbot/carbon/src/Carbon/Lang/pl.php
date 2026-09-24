@@ -54,32 +54,15 @@ return [
     's' => ':count sek.',
     'ago' => ':time temu',
     'from_now' => static function ($time) {
-        switch ($time) {
-            case '1 godzina':
-                return 'za 1 godzinę';
-
-            case '1 minuta':
-                return 'za 1 minutę';
-
-            case '1 sekunda':
-                return 'za 1 sekundę';
-
-            case 'godzina':
-                return 'za godzinę';
-
-            case 'minuta':
-                return 'za minutę';
-
-            case 'sekunda':
-                return 'za sekundę';
-
-            default:
-                return "za $time";
-        }
+        return 'za '.strtr($time, [
+            'godzina' => 'godzinę',
+            'minuta' => 'minutę',
+            'sekunda' => 'sekundę',
+        ]);
     },
     'after' => ':time po',
     'before' => ':time przed',
-    'diff_now' => 'przed chwilą',
+    'diff_now' => 'teraz',
     'diff_today' => 'Dziś',
     'diff_today_regexp' => 'Dziś(?:\\s+o)?',
     'diff_yesterday' => 'wczoraj',
@@ -99,32 +82,19 @@ return [
     'calendar' => [
         'sameDay' => '[Dziś o] LT',
         'nextDay' => '[Jutro o] LT',
-        'nextWeek' => function (CarbonInterface $date) {
-            switch ($date->dayOfWeek) {
-                case 0:
-                    return '[W niedzielę o] LT';
-                case 2:
-                    return '[We wtorek o] LT';
-                case 3:
-                    return '[W środę o] LT';
-                case 6:
-                    return '[W sobotę o] LT';
-                default:
-                    return '[W] dddd [o] LT';
-            }
+        'nextWeek' => static fn (CarbonInterface $date) => match ($date->dayOfWeek) {
+            0 => '[W niedzielę o] LT',
+            2 => '[We wtorek o] LT',
+            3 => '[W środę o] LT',
+            6 => '[W sobotę o] LT',
+            default => '[W] dddd [o] LT',
         },
         'lastDay' => '[Wczoraj o] LT',
-        'lastWeek' => function (CarbonInterface $date) {
-            switch ($date->dayOfWeek) {
-                case 0:
-                    return '[W zeszłą niedzielę o] LT';
-                case 3:
-                    return '[W zeszłą środę o] LT';
-                case 6:
-                    return '[W zeszłą sobotę o] LT';
-                default:
-                    return '[W zeszły] dddd [o] LT';
-            }
+        'lastWeek' => static fn (CarbonInterface $date) => match ($date->dayOfWeek) {
+            0 => '[W zeszłą niedzielę o] LT',
+            3 => '[W zeszłą środę o] LT',
+            6 => '[W zeszłą sobotę o] LT',
+            default => '[W zeszły] dddd [o] LT',
         },
         'sameElse' => 'L',
     ],

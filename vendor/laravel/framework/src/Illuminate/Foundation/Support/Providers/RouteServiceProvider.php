@@ -2,6 +2,7 @@
 
 namespace Illuminate\Foundation\Support\Providers;
 
+use Closure;
 use Illuminate\Contracts\Routing\UrlGenerator;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
@@ -22,24 +23,92 @@ class RouteServiceProvider extends ServiceProvider
     protected $namespace;
 
     /**
+     * The callback that should be used to load the application's routes.
+     *
+     * @var \Closure|null
+     */
+    protected $loadRoutesUsing;
+
+    /**
+     * The global callback that should be used to load the application's routes.
+     *
+     * @var \Closure|null
+     */
+    protected static $alwaysLoadRoutesUsing;
+
+    /**
+     * The callback that should be used to load the application's cached routes.
+     *
+     * @var \Closure|null
+     */
+    protected static $alwaysLoadCachedRoutesUsing;
+
+    /**
+     * Register any application services.
+     *
+     * @return void
+     */
+    public function register()
+    {
+        $this->booted(function () {
+            $this->setRootControllerNamespace();
+
+            if ($this->routesAreCached()) {
+                $this->loadCachedRoutes();
+            } else {
+                $this->loadRoutes();
+
+                $this->app->booted(function () {
+                    $this->app['router']->getRoutes()->refreshNameLookups();
+                    $this->app['router']->getRoutes()->refreshActionLookups();
+                });
+            }
+        });
+    }
+
+    /**
      * Bootstrap any application services.
      *
      * @return void
      */
     public function boot()
     {
-        $this->setRootControllerNamespace();
+        //
+    }
 
-        if ($this->routesAreCached()) {
-            $this->loadCachedRoutes();
-        } else {
-            $this->loadRoutes();
+    /**
+     * Register the callback that will be used to load the application's routes.
+     *
+     * @param  \Closure  $routesCallback
+     * @return $this
+     */
+    protected function routes(Closure $routesCallback)
+    {
+        $this->loadRoutesUsing = $routesCallback;
 
-            $this->app->booted(function () {
-                $this->app['router']->getRoutes()->refreshNameLookups();
-                $this->app['router']->getRoutes()->refreshActionLookups();
-            });
-        }
+        return $this;
+    }
+
+    /**
+     * Register the callback that will be used to load the application's routes.
+     *
+     * @param  \Closure|null  $routesCallback
+     * @return void
+     */
+    public static function loadRoutesUsing(?Closure $routesCallback)
+    {
+        self::$alwaysLoadRoutesUsing = $routesCallback;
+    }
+
+    /**
+     * Register the callback that will be used to load the application's cached routes.
+     *
+     * @param  \Closure|null  $routesCallback
+     * @return void
+     */
+    public static function loadCachedRoutesUsing(?Closure $routesCallback)
+    {
+        self::$alwaysLoadCachedRoutesUsing = $routesCallback;
     }
 
     /**
@@ -71,6 +140,12 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function loadCachedRoutes()
     {
+        if (! is_null(self::$alwaysLoadCachedRoutesUsing)) {
+            $this->app->call(self::$alwaysLoadCachedRoutesUsing);
+
+            return;
+        }
+
         $this->app->booted(function () {
             require $this->app->getCachedRoutesPath();
         });
@@ -83,7 +158,13 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function loadRoutes()
     {
-        if (method_exists($this, 'map')) {
+        if (! is_null(self::$alwaysLoadRoutesUsing)) {
+            $this->app->call(self::$alwaysLoadRoutesUsing);
+        }
+
+        if (! is_null($this->loadRoutesUsing)) {
+            $this->app->call($this->loadRoutesUsing);
+        } elseif (method_exists($this, 'map')) {
             $this->app->call([$this, 'map']);
         }
     }

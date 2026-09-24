@@ -18,7 +18,7 @@ class DatabaseJob extends Job implements JobContract
     /**
      * The database job payload.
      *
-     * @var \stdClass
+     * @var \Illuminate\Queue\Jobs\DatabaseJobRecord
      */
     protected $job;
 
@@ -27,10 +27,9 @@ class DatabaseJob extends Job implements JobContract
      *
      * @param  \Illuminate\Container\Container  $container
      * @param  \Illuminate\Queue\DatabaseQueue  $database
-     * @param  \stdClass  $job
+     * @param  \Illuminate\Queue\Jobs\DatabaseJobRecord  $job
      * @param  string  $connectionName
      * @param  string  $queue
-     * @return void
      */
     public function __construct(Container $container, DatabaseQueue $database, $job, $connectionName, $queue)
     {
@@ -42,18 +41,16 @@ class DatabaseJob extends Job implements JobContract
     }
 
     /**
-     * Release the job back into the queue.
+     * Release the job back into the queue after (n) seconds.
      *
      * @param  int  $delay
-     * @return mixed
+     * @return void
      */
     public function release($delay = 0)
     {
         parent::release($delay);
 
-        $this->delete();
-
-        return $this->database->release($this->queue, $this->job, $delay);
+        $this->database->deleteAndRelease($this->queue, $this, $delay);
     }
 
     /**
@@ -81,7 +78,7 @@ class DatabaseJob extends Job implements JobContract
     /**
      * Get the job identifier.
      *
-     * @return string
+     * @return string|int
      */
     public function getJobId()
     {
@@ -96,5 +93,15 @@ class DatabaseJob extends Job implements JobContract
     public function getRawBody()
     {
         return $this->job->payload;
+    }
+
+    /**
+     * Get the database job record.
+     *
+     * @return \Illuminate\Queue\Jobs\DatabaseJobRecord
+     */
+    public function getJobRecord()
+    {
+        return $this->job;
     }
 }

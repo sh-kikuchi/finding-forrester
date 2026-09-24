@@ -3,17 +3,25 @@
 namespace Illuminate\Foundation\Console;
 
 use Illuminate\Console\GeneratorCommand;
-use Illuminate\Support\Str;
-use Symfony\Component\Console\Input\InputOption;
+use InvalidArgumentException;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 
+use function Laravel\Prompts\suggest;
+
+#[AsCommand(name: 'make:observer')]
 class ObserverMakeCommand extends GeneratorCommand
 {
     /**
-     * The console command name.
+     * The name and signature of the console command.
      *
      * @var string
      */
-    protected $name = 'make:observer';
+    protected $signature = 'make:observer
+                    {name : The name of the observer}
+                    {--f|force : Create the class even if the observer already exists}
+                    {--m|model= : The model that the observer applies to}';
 
     /**
      * The console command description.
@@ -45,18 +53,6 @@ class ObserverMakeCommand extends GeneratorCommand
     }
 
     /**
-     * Get the stub file for the generator.
-     *
-     * @return string
-     */
-    protected function getStub()
-    {
-        return $this->option('model')
-                    ? __DIR__.'/stubs/observer.stub'
-                    : __DIR__.'/stubs/observer.plain.stub';
-    }
-
-    /**
      * Replace the model for the given stub.
      *
      * @param  string  $stub
@@ -65,27 +61,65 @@ class ObserverMakeCommand extends GeneratorCommand
      */
     protected function replaceModel($stub, $model)
     {
-        $model = str_replace('/', '\\', $model);
+        $modelClass = $this->parseModel($model);
 
-        $namespaceModel = $this->laravel->getNamespace().$model;
+        $replace = [
+            'DummyFullModelClass' => $modelClass,
+            '{{ namespacedModel }}' => $modelClass,
+            '{{namespacedModel}}' => $modelClass,
+            'DummyModelClass' => class_basename($modelClass),
+            '{{ model }}' => class_basename($modelClass),
+            '{{model}}' => class_basename($modelClass),
+            'DummyModelVariable' => lcfirst(class_basename($modelClass)),
+            '{{ modelVariable }}' => lcfirst(class_basename($modelClass)),
+            '{{modelVariable}}' => lcfirst(class_basename($modelClass)),
+        ];
 
-        if (Str::startsWith($model, '\\')) {
-            $stub = str_replace('NamespacedDummyModel', trim($model, '\\'), $stub);
-        } else {
-            $stub = str_replace('NamespacedDummyModel', $namespaceModel, $stub);
+        return str_replace(
+            array_keys($replace), array_values($replace), $stub
+        );
+    }
+
+    /**
+     * Get the fully-qualified model class name.
+     *
+     * @param  string  $model
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function parseModel($model)
+    {
+        if (preg_match('/[^A-Za-z0-9_\/\\\\]/', $model)) {
+            throw new InvalidArgumentException('Model name contains invalid characters.');
         }
 
-        $stub = str_replace(
-            "use {$namespaceModel};\nuse {$namespaceModel};", "use {$namespaceModel};", $stub
-        );
+        return $this->qualifyModel($model);
+    }
 
-        $model = class_basename(trim($model, '\\'));
+    /**
+     * Get the stub file for the generator.
+     *
+     * @return string
+     */
+    protected function getStub()
+    {
+        return $this->option('model')
+            ? $this->resolveStubPath('/stubs/observer.stub')
+            : $this->resolveStubPath('/stubs/observer.plain.stub');
+    }
 
-        $stub = str_replace('DocDummyModel', Str::snake($model, ' '), $stub);
-
-        $stub = str_replace('DummyModel', $model, $stub);
-
-        return str_replace('dummyModel', Str::camel($model), $stub);
+    /**
+     * Resolve the fully-qualified path to the stub.
+     *
+     * @param  string  $stub
+     * @return string
+     */
+    protected function resolveStubPath($stub)
+    {
+        return file_exists($customPath = $this->laravel->basePath(trim($stub, '/')))
+            ? $customPath
+            : __DIR__.$stub;
     }
 
     /**
@@ -100,14 +134,25 @@ class ObserverMakeCommand extends GeneratorCommand
     }
 
     /**
-     * Get the console command arguments.
+     * Interact further with the user if they were prompted for missing arguments.
      *
-     * @return array
+     * @param  \Symfony\Component\Console\Input\InputInterface  $input
+     * @param  \Symfony\Component\Console\Output\OutputInterface  $output
+     * @return void
      */
-    protected function getOptions()
+    protected function afterPromptingForMissingArguments(InputInterface $input, OutputInterface $output)
     {
-        return [
-            ['model', 'm', InputOption::VALUE_OPTIONAL, 'The model that the observer applies to.'],
-        ];
+        if ($this->isReservedName($this->getNameInput()) || $this->didReceiveOptions($input)) {
+            return;
+        }
+
+        $model = suggest(
+            'What model should be observed? (Optional)',
+            $this->findAvailableModels(),
+        );
+
+        if ($model) {
+            $input->setOption('model', $model);
+        }
     }
 }

@@ -2,7 +2,6 @@
 
 namespace Illuminate\Foundation;
 
-use Exception;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
@@ -15,22 +14,28 @@ class Mix
      * @param  string  $manifestDirectory
      * @return \Illuminate\Support\HtmlString|string
      *
-     * @throws \Exception
+     * @throws \Illuminate\Foundation\MixManifestNotFoundException|\Illuminate\Foundation\MixFileNotFoundException
      */
     public function __invoke($path, $manifestDirectory = '')
     {
         static $manifests = [];
 
-        if (! Str::startsWith($path, '/')) {
+        if (! str_starts_with($path, '/')) {
             $path = "/{$path}";
         }
 
-        if ($manifestDirectory && ! Str::startsWith($manifestDirectory, '/')) {
+        if ($manifestDirectory && ! str_starts_with($manifestDirectory, '/')) {
             $manifestDirectory = "/{$manifestDirectory}";
         }
 
-        if (file_exists(public_path($manifestDirectory.'/hot'))) {
+        if (is_file(public_path($manifestDirectory.'/hot'))) {
             $url = rtrim(file_get_contents(public_path($manifestDirectory.'/hot')));
+
+            $customUrl = app('config')->get('app.mix_hot_proxy_url');
+
+            if (! empty($customUrl)) {
+                return new HtmlString("{$customUrl}{$path}");
+            }
 
             if (Str::startsWith($url, ['http://', 'https://'])) {
                 return new HtmlString(Str::after($url, ':').$path);
@@ -42,8 +47,8 @@ class Mix
         $manifestPath = public_path($manifestDirectory.'/mix-manifest.json');
 
         if (! isset($manifests[$manifestPath])) {
-            if (! file_exists($manifestPath)) {
-                throw new Exception('The Mix manifest does not exist.');
+            if (! is_file($manifestPath)) {
+                throw new MixManifestNotFoundException("Mix manifest not found at: {$manifestPath}");
             }
 
             $manifests[$manifestPath] = json_decode(file_get_contents($manifestPath), true);
@@ -52,7 +57,7 @@ class Mix
         $manifest = $manifests[$manifestPath];
 
         if (! isset($manifest[$path])) {
-            $exception = new Exception("Unable to locate Mix file: {$path}.");
+            $exception = new MixFileNotFoundException("Unable to locate Mix file: {$path}.");
 
             if (! app('config')->get('app.debug')) {
                 report($exception);

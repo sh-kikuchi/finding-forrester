@@ -1,20 +1,48 @@
 <?php return array (
-  'facade/ignition' => 
+  'laravel/boost' => 
   array (
     'providers' => 
     array (
-      0 => 'Facade\\Ignition\\IgnitionServiceProvider',
-    ),
-    'aliases' => 
-    array (
-      'Flare' => 'Facade\\Ignition\\Facades\\Flare',
+      0 => 'Laravel\\Boost\\BoostServiceProvider',
     ),
   ),
-  'fideloper/proxy' => 
+  'laravel/breeze' => 
   array (
     'providers' => 
     array (
-      0 => 'Fideloper\\Proxy\\TrustedProxyServiceProvider',
+      0 => 'Laravel\\Breeze\\BreezeServiceProvider',
+    ),
+  ),
+  'laravel/mcp' => 
+  array (
+    'aliases' => 
+    array (
+      'Mcp' => 'Laravel\\Mcp\\Facades\\Mcp',
+    ),
+    'providers' => 
+    array (
+      0 => 'Laravel\\Mcp\\Server\\McpServiceProvider',
+    ),
+  ),
+  'laravel/pail' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Laravel\\Pail\\PailServiceProvider',
+    ),
+  ),
+  'laravel/pao' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Laravel\\Pao\\Laravel\\ServiceProvider',
+    ),
+  ),
+  'laravel/roster' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Laravel\\Roster\\RosterServiceProvider',
     ),
   ),
   'laravel/tinker' => 
@@ -22,6 +50,24 @@
     'providers' => 
     array (
       0 => 'Laravel\\Tinker\\TinkerServiceProvider',
+    ),
+  ),
+  'livewire/livewire' => 
+  array (
+    'aliases' => 
+    array (
+      'Livewire' => 'Livewire\\Livewire',
+    ),
+    'providers' => 
+    array (
+      0 => 'Livewire\\LivewireServiceProvider',
+    ),
+  ),
+  'livewire/volt' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Livewire\\Volt\\VoltServiceProvider',
     ),
   ),
   'nesbot/carbon' => 
@@ -36,6 +82,13 @@
     'providers' => 
     array (
       0 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
+    ),
+  ),
+  'nunomaduro/termwind' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Termwind\\Laravel\\TermwindServiceProvider',
     ),
   ),
 );

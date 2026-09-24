@@ -4,24 +4,23 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
+/**
+ * アプリケーション全体のサービスプロバイダー。
+ */
 class AppServiceProvider extends ServiceProvider
 {
     /**
-     * Register any application services.
-     *
-     * @return void
+     * アプリケーションのサービスを登録する。
      */
-    public function register()
+    public function register(): void
     {
         //
     }
 
     /**
-     * Bootstrap any application services.
-     *
-     * @return void
+     * アプリケーションのサービスを初期化する。
      */
-    public function boot()
+    public function boot(): void
     {
         //
     }

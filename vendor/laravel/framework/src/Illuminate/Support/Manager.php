@@ -5,24 +5,19 @@ namespace Illuminate\Support;
 use Closure;
 use Illuminate\Contracts\Container\Container;
 use InvalidArgumentException;
+use ReflectionException;
+use RuntimeException;
 
 abstract class Manager
 {
+    use RebindsCallbacksToSelf;
+
     /**
      * The container instance.
      *
      * @var \Illuminate\Contracts\Container\Container
      */
     protected $container;
-
-    /**
-     * The container instance.
-     *
-     * @var \Illuminate\Contracts\Container\Container
-     *
-     * @deprecated Use the $container property instead.
-     */
-    protected $app;
 
     /**
      * The configuration repository instance.
@@ -34,14 +29,14 @@ abstract class Manager
     /**
      * The registered custom driver creators.
      *
-     * @var array
+     * @var array<string, \Closure>
      */
     protected $customCreators = [];
 
     /**
      * The array of created "drivers".
      *
-     * @var array
+     * @var array<string, mixed>
      */
     protected $drivers = [];
 
@@ -49,11 +44,9 @@ abstract class Manager
      * Create a new manager instance.
      *
      * @param  \Illuminate\Contracts\Container\Container  $container
-     * @return void
      */
     public function __construct(Container $container)
     {
-        $this->app = $container;
         $this->container = $container;
         $this->config = $container->make('config');
     }
@@ -61,21 +54,21 @@ abstract class Manager
     /**
      * Get the default driver name.
      *
-     * @return string
+     * @return string|null
      */
     abstract public function getDefaultDriver();
 
     /**
      * Get a driver instance.
      *
-     * @param  string  $driver
+     * @param  \UnitEnum|string|null  $driver
      * @return mixed
      *
      * @throws \InvalidArgumentException
      */
     public function driver($driver = null)
     {
-        $driver = $driver ?: $this->getDefaultDriver();
+        $driver = enum_value($driver) ?: $this->getDefaultDriver();
 
         if (is_null($driver)) {
             throw new InvalidArgumentException(sprintf(
@@ -86,11 +79,7 @@ abstract class Manager
         // If the given driver has not been created before, we will create the instances
         // here and cache it so we can return it next time very quickly. If there is
         // already a driver created by this name, we'll just return that instance.
-        if (! isset($this->drivers[$driver])) {
-            $this->drivers[$driver] = $this->createDriver($driver);
-        }
-
-        return $this->drivers[$driver];
+        return $this->drivers[$driver] ??= $this->createDriver($driver);
     }
 
     /**
@@ -108,12 +97,12 @@ abstract class Manager
         // callbacks allow developers to build their own "drivers" easily using Closures.
         if (isset($this->customCreators[$driver])) {
             return $this->callCustomCreator($driver);
-        } else {
-            $method = 'create'.Str::studly($driver).'Driver';
+        }
 
-            if (method_exists($this, $method)) {
-                return $this->$method();
-            }
+        $method = 'create'.Str::studly($driver).'Driver';
+
+        if (method_exists($this, $method)) {
+            return $this->$method();
         }
 
         throw new InvalidArgumentException("Driver [$driver] not supported.");
@@ -134,11 +123,19 @@ abstract class Manager
      * Register a custom driver creator Closure.
      *
      * @param  string  $driver
-     * @param  \Closure  $callback
+     *
+     * @param-closure-this  $this  $callback
+     *
      * @return $this
      */
     public function extend($driver, Closure $callback)
     {
+        try {
+            $callback = $this->bindCallbackToSelf($callback) ?? throw new RuntimeException('Unable to bind custom driver callback');
+        } catch (ReflectionException $e) {
+            throw new RuntimeException('Unable to bind custom driver callback', previous: $e);
+        }
+
         $this->customCreators[$driver] = $callback;
 
         return $this;
@@ -147,7 +144,7 @@ abstract class Manager
     /**
      * Get all of the created "drivers".
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getDrivers()
     {
@@ -155,10 +152,45 @@ abstract class Manager
     }
 
     /**
+     * Get the container instance used by the manager.
+     *
+     * @return \Illuminate\Contracts\Container\Container
+     */
+    public function getContainer()
+    {
+        return $this->container;
+    }
+
+    /**
+     * Set the container instance used by the manager.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @return $this
+     */
+    public function setContainer(Container $container)
+    {
+        $this->container = $container;
+
+        return $this;
+    }
+
+    /**
+     * Forget all of the resolved driver instances.
+     *
+     * @return $this
+     */
+    public function forgetDrivers()
+    {
+        $this->drivers = [];
+
+        return $this;
+    }
+
+    /**
      * Dynamically call the default driver instance.
      *
      * @param  string  $method
-     * @param  array  $parameters
+     * @param  array<string, mixed>  $parameters
      * @return mixed
      */
     public function __call($method, $parameters)

@@ -1,78 +1,116 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400"></a></p>
+# finding-forrester (re:vue mix)
 
-<p align="center">
-<a href="https://travis-ci.org/laravel/framework"><img src="https://travis-ci.org/laravel/framework.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/d/total.svg" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/v/stable.svg" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/license.svg" alt="License"></a>
-</p>
+このリポジトリは、[HMisawa3/finding-forrester](https://github.com/HMisawa3/finding-forrester) をフォークして作成したものです。
 
-## About Laravel
+## アプリ概要
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+個人の本屋（店舗）が本を出品・管理し、購入者が本を探して注文できる、本屋向けのWebアプリです。ユーザーには2つの役割（ロール）があります。
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| ロール | できること |
+| --- | --- |
+| 管理者（店舗） | 本の登録・編集・削除、在庫と販売可否の管理、ショップ情報の編集、受注の確認、注文の発送（購入者へ発送メールを送信） |
+| 個人ユーザー（購入者） | 本屋での本の閲覧、カートへの追加、注文の確定、注文履歴の確認 |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+ゲスト（未ログイン）でも、入荷本一覧・本屋・カートは利用できます。注文の確定にはログインが必要です。
 
-## Learning Laravel
+### 主な機能
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **入荷本一覧（`/new`）**: 直近1ヶ月に登録された本を、誰でも閲覧できます。
+- **本の検索・登録（管理者）**: サイト内の本をタイトルで検索できます。Google Books API の検索結果から、本の情報を登録フォームへ引き継ぐこともできます。
+- **本屋（`/store`）**: 販売中の本をジャンルで絞り込んで閲覧し、カートへ追加できます。
+- **カート・注文**: カートはセッションで保持します。注文確定時に在庫を確認し、注文と在庫の更新を1つのトランザクションで行います。
+- **受注管理（管理者・`/shop/orders`）**: 自分の本を含む注文を、注文単位で確認できます。「発送する」を押すと、その注文のうち自分の本だけが発送済みになります。
+- **発送メール**: 発送すると、購入者へ発送メールをキュー経由で送信します。発送の単位は「注文 × 出品者」です。同じ出品者の本は1通にまとまり、同じ注文に別の出品者の本があれば、出品者ごとに別のメールになります。
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains over 1500 video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### 技術スタック
 
-## Laravel Sponsors
+- PHP 8.3 以上 / Laravel 13
+- Livewire 3 / Volt（認証まわりの画面）
+- Tailwind CSS / Vite
+- DB: SQLite（既定）
+- キュー・セッション・キャッシュ: データベースドライバ（既定）
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the Laravel [Patreon page](https://patreon.com/taylorotwell).
+## 準備
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Cubet Techno Labs](https://cubettech.com)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[British Software Development](https://www.britishsoftware.co)**
-- **[Webdock, Fast VPS Hosting](https://www.webdock.io/en)**
-- **[DevSquad](https://devsquad.com)**
-- [UserInsights](https://userinsights.com)
-- [Fragrantica](https://www.fragrantica.com)
-- [SOFTonSOFA](https://softonsofa.com/)
-- [User10](https://user10.com)
-- [Soumettre.fr](https://soumettre.fr/)
-- [CodeBrisk](https://codebrisk.com)
-- [1Forge](https://1forge.com)
-- [TECPRESSO](https://tecpresso.co.jp/)
-- [Runtime Converter](http://runtimeconverter.com/)
-- [WebL'Agence](https://weblagence.com/)
-- [Invoice Ninja](https://www.invoiceninja.com)
-- [iMi digital](https://www.imi-digital.de/)
-- [Earthlink](https://www.earthlink.ro/)
-- [Steadfast Collective](https://steadfastcollective.com/)
-- [We Are The Robots Inc.](https://watr.mx/)
-- [Understand.io](https://www.understand.io/)
-- [Abdel Elrafa](https://abdelelrafa.com)
-- [Hyper Host](https://hyper.host)
-- [Appoly](https://www.appoly.co.uk)
-- [OP.GG](https://op.gg)
+### 必要なもの
 
-## Contributing
+- PHP 8.3 以上
+- Composer
+- Node.js / npm
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### セットアップ
 
-## Code of Conduct
+```
+composer install
+cp .env.example .env
+php artisan key:generate
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+SQLite を使う場合は、DBファイルを作成してからマイグレーションを実行します。
 
-## Security Vulnerabilities
+```
+touch database/database.sqlite
+php artisan migrate
+npm install
+npm run build
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+`composer run setup` で、上の手順（`.env` の作成・キー生成・マイグレーション・フロントエンドのビルド）をまとめて実行することもできます。
 
-## License
+### 動作確認用のデータ
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+シーダーを実行すると、動作確認用のユーザーが2人作成されます。パスワードはどちらも `password` です。
+
+```
+php artisan db:seed
+```
+
+| 役割 | メールアドレス |
+| --- | --- |
+| 個人ユーザー | test@example.com |
+| 管理者（店舗） | shop@example.com |
+
+### 環境変数（`.env`）
+
+| 変数 | 説明 |
+| --- | --- |
+| `QUEUE_CONNECTION` | 既定は `database`。発送メールはキューに積まれるため、実行にはワーカーの起動が必要です（下記「実行」を参照）。 |
+| `MAIL_MAILER` | 既定は `log`。メールは実際には送信されず、`storage/logs/laravel.log` に内容が出力されます。実際に送る場合は `smtp` などに変更し、`MAIL_HOST` などの接続情報も設定します。 |
+| `GOOGLE_BOOKS_API_KEY` | 任意。未設定でも Google Books 検索は動きますが、匿名の共有クォータは小さく、制限（429）に当たりやすくなります。 |
+
+### テスト
+
+```
+php artisan test
+```
+
+## 実行
+
+キューワーカーを起動します。発送メールはキューに積まれるため、ワーカーが動いていないとメールは処理されません。コードを変更した場合は、ワーカーを再起動してください。
+
+```
+php artisan queue:work
+```
+
+開発サーバーを起動します。
+
+```
+php artisan serve
+```
+or
+```
+composer run dev
+```
+※`npm run dev`も併せて実行したい場合に便利。
+
+### 発送メールの確認方法（開発時）
+
+`MAIL_MAILER=log` の場合、メールは送信されず、`storage/logs/laravel.log` に宛先・件名・本文が出力されます。
+
+1. `php artisan queue:work` を起動しておく
+2. 管理者（`shop@example.com`）でログインし、受注一覧（`/shop/orders`）で「発送する」を押す
+3. `storage/logs/laravel.log` の末尾で、メールの内容を確認する
+
+## Special Thanks
+
+このアプリは、[HMisawa3](https://github.com/HMisawa3) さんが作成された [finding-forrester](https://github.com/HMisawa3/finding-forrester) をもとにしています。リミックスを快く承諾してくださったことに、心から感謝いたします。

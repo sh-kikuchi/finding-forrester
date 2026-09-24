@@ -26,7 +26,6 @@ class RedisConnector implements ConnectorInterface
      *
      * @param  \Illuminate\Contracts\Redis\Factory  $redis
      * @param  string|null  $connection
-     * @return void
      */
     public function __construct(Redis $redis, $connection = null)
     {
@@ -46,7 +45,9 @@ class RedisConnector implements ConnectorInterface
             $this->redis, $config['queue'],
             $config['connection'] ?? $this->connection,
             $config['retry_after'] ?? 60,
-            $config['block_for'] ?? null
+            $config['block_for'] ?? null,
+            $config['after_commit'] ?? null,
+            $config['migration_batch_size'] ?? -1
         );
     }
 }

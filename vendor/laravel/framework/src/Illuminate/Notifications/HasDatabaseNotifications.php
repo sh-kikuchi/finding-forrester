@@ -7,30 +7,30 @@ trait HasDatabaseNotifications
     /**
      * Get the entity's notifications.
      *
-     * @return \Illuminate\Database\Eloquent\Relations\MorphMany
+     * @return \Illuminate\Database\Eloquent\Relations\MorphMany<DatabaseNotification, $this>
      */
     public function notifications()
     {
-        return $this->morphMany(DatabaseNotification::class, 'notifiable')->orderBy('created_at', 'desc');
+        return $this->morphMany(DatabaseNotification::class, 'notifiable')->latest();
     }
 
     /**
      * Get the entity's read notifications.
      *
-     * @return \Illuminate\Database\Query\Builder
+     * @return \Illuminate\Database\Eloquent\Relations\MorphMany<DatabaseNotification, $this>
      */
     public function readNotifications()
     {
-        return $this->notifications()->whereNotNull('read_at');
+        return $this->notifications()->read();
     }
 
     /**
      * Get the entity's unread notifications.
      *
-     * @return \Illuminate\Database\Query\Builder
+     * @return \Illuminate\Database\Eloquent\Relations\MorphMany<DatabaseNotification, $this>
      */
     public function unreadNotifications()
     {
-        return $this->notifications()->whereNull('read_at');
+        return $this->notifications()->unread();
     }
 }

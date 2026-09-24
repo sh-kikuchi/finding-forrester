@@ -178,7 +178,7 @@ trait ManagesLayouts
         if (! isset(static::$parentPlaceholder[$section])) {
             $salt = static::parentPlaceholderSalt();
 
-            static::$parentPlaceholder[$section] = '##parent-placeholder-'.sha1($salt.$section).'##';
+            static::$parentPlaceholder[$section] = '##parent-placeholder-'.hash('xxh128', $salt.$section).'##';
         }
 
         return static::$parentPlaceholder[$section];
@@ -207,6 +207,17 @@ trait ManagesLayouts
     public function hasSection($name)
     {
         return array_key_exists($name, $this->sections);
+    }
+
+    /**
+     * Check if section does not exist.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    public function sectionMissing($name)
+    {
+        return ! $this->hasSection($name);
     }
 
     /**

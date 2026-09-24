@@ -4,96 +4,71 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title>Laravel</title>
+        <title>{{ config('app.name', 'Laravel') }}</title>
 
         <!-- Fonts -->
-        <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@200;600&display=swap" rel="stylesheet">
+        <link rel="preconnect" href="https://fonts.bunny.net">
+        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Styles -->
-        <style>
-            html, body {
-                background-color: #fff;
-                color: #636b6f;
-                font-family: 'Nunito', sans-serif;
-                font-weight: 200;
-                height: 100vh;
-                margin: 0;
-            }
-
-            .full-height {
-                height: 100vh;
-            }
-
-            .flex-center {
-                align-items: center;
-                display: flex;
-                justify-content: center;
-            }
-
-            .position-ref {
-                position: relative;
-            }
-
-            .top-right {
-                position: absolute;
-                right: 10px;
-                top: 18px;
-            }
-
-            .content {
-                text-align: center;
-            }
-
-            .title {
-                font-size: 84px;
-            }
-
-            .links > a {
-                color: #636b6f;
-                padding: 0 25px;
-                font-size: 13px;
-                font-weight: 600;
-                letter-spacing: .1rem;
-                text-decoration: none;
-                text-transform: uppercase;
-            }
-
-            .m-b-md {
-                margin-bottom: 30px;
-            }
-        </style>
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body>
-        <div class="flex-center position-ref full-height">
-            @if (Route::has('login'))
-                <div class="top-right links">
-                    @auth
-                        <a href="{{ url('/home') }}">Home</a>
-                    @else
-                        <a href="{{ route('login') }}">Login</a>
+    <body class="antialiased font-sans">
+        <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <header class="flex items-center justify-between py-6">
+                    <div class="flex items-center gap-2">
+                        <x-application-logo class="block h-9 w-auto fill-current text-gray-800 dark:text-gray-200" />
+                        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ __('Finding Forrester') }}</span>
+                    </div>
 
-                        @if (Route::has('register'))
-                            <a href="{{ route('register') }}">Register</a>
-                        @endif
-                    @endauth
-                </div>
-            @endif
+                    @if (Route::has('login'))
+                        <livewire:welcome.navigation />
+                    @endif
+                </header>
 
-            <div class="content">
-                <div class="title m-b-md">
-                    Laravel
-                </div>
+                <main>
+                    <!-- Hero -->
+                    <section class="py-12 text-center sm:py-16">
+                        <h1 class="text-4xl font-bold text-gray-900 dark:text-gray-100 sm:text-6xl">
+                            {{ __('偶然の一冊が、人生を豊かにする。') }}
+                        </h1>
+                        <p class="mt-4 text-base text-gray-600 dark:text-gray-400 sm:text-lg">
+                            {{ __('本を見つける。自分を見つける。') }}
+                        </p>
 
-                <div class="links">
-                    <a href="https://laravel.com/docs">Docs</a>
-                    <a href="https://laracasts.com">Laracasts</a>
-                    <a href="https://laravel-news.com">News</a>
-                    <a href="https://blog.laravel.com">Blog</a>
-                    <a href="https://nova.laravel.com">Nova</a>
-                    <a href="https://forge.laravel.com">Forge</a>
-                    <a href="https://vapor.laravel.com">Vapor</a>
-                    <a href="https://github.com/laravel/laravel">GitHub</a>
-                </div>
+                        <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+                            @if (auth()->check())
+                                @if (auth()->user()->isAdmin())
+                                    <a href="{{ route('search') }}" wire:navigate>
+                                        <x-primary-button>{{ __('書籍を探す') }}</x-primary-button>
+                                    </a>
+                                    <a href="{{ route('book.create') }}" wire:navigate>
+                                        <x-secondary-button>{{ __('本を登録する') }}</x-secondary-button>
+                                    </a>
+                                    <a href="{{ route('book.new') }}" wire:navigate>
+                                        <x-secondary-button>{{ __('入荷本一覧へ') }}</x-secondary-button>
+                                    </a>
+                                @else
+                                    <a href="{{ route('store.index') }}" wire:navigate>
+                                        <x-primary-button>{{ __('本屋へ') }}</x-primary-button>
+                                    </a>
+                                @endif
+                            @else
+                                <a href="{{ route('register') }}" wire:navigate>
+                                    <x-secondary-button>{{ __('アカウント新規登録') }}</x-secondary-button>
+                                </a>
+                                <a href="{{ route('book.new') }}" wire:navigate>
+                                    <x-secondary-button>{{ __('入荷本一覧へ') }}</x-secondary-button>
+                                </a>
+                            @endif
+                        </div>
+                    </section>
+                </main>
+
+                <footer class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {{ __('remixed by re:vue') }}
+                </footer>
             </div>
         </div>
     </body>

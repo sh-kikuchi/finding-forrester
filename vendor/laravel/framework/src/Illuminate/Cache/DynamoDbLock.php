@@ -18,7 +18,6 @@ class DynamoDbLock extends Lock
      * @param  string  $name
      * @param  int  $seconds
      * @param  string|null  $owner
-     * @return void
      */
     public function __construct(DynamoDbStore $dynamo, $name, $seconds, $owner = null)
     {
@@ -34,9 +33,28 @@ class DynamoDbLock extends Lock
      */
     public function acquire()
     {
-        return $this->dynamo->add(
-            $this->name, $this->owner, $this->seconds
-        );
+        if ($this->seconds > 0) {
+            return $this->dynamo->add($this->name, $this->owner, $this->seconds);
+        }
+
+        return $this->dynamo->add($this->name, $this->owner, 86400);
+    }
+
+    /**
+     * Attempt to refresh the lock for the given number of seconds.
+     *
+     * @param  int|null  $seconds
+     * @return bool
+     */
+    public function refresh($seconds = null)
+    {
+        $seconds ??= $this->seconds;
+
+        if ($seconds <= 0) {
+            $seconds = 86400;
+        }
+
+        return $this->dynamo->refreshIfOwned($this->name, $this->owner, $seconds);
     }
 
     /**

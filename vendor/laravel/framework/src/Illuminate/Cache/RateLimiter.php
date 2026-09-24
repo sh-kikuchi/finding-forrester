@@ -2,12 +2,18 @@
 
 namespace Illuminate\Cache;
 
+use Closure;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Redis\Connections\PhpRedisConnection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\InteractsWithTime;
+use Illuminate\Support\Traits\Macroable;
+
+use function Illuminate\Support\enum_value;
 
 class RateLimiter
 {
-    use InteractsWithTime;
+    use InteractsWithTime, Macroable;
 
     /**
      * The cache store implementation.
@@ -17,14 +23,99 @@ class RateLimiter
     protected $cache;
 
     /**
+     * The configured limit object resolvers.
+     *
+     * @var array
+     */
+    protected $limiters = [];
+
+    /**
      * Create a new rate limiter instance.
      *
      * @param  \Illuminate\Contracts\Cache\Repository  $cache
-     * @return void
      */
     public function __construct(Cache $cache)
     {
         $this->cache = $cache;
+    }
+
+    /**
+     * Register a named rate limiter configuration.
+     *
+     * @param  \UnitEnum|string  $name
+     * @param  \Closure  $callback
+     * @return $this
+     */
+    public function for($name, Closure $callback)
+    {
+        $resolvedName = $this->resolveLimiterName($name);
+
+        $this->limiters[$resolvedName] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Get the given named rate limiter.
+     *
+     * @param  \UnitEnum|string  $name
+     * @return \Closure|null
+     */
+    public function limiter($name)
+    {
+        $resolvedName = $this->resolveLimiterName($name);
+
+        $limiter = $this->limiters[$resolvedName] ?? null;
+
+        if (! is_callable($limiter)) {
+            return;
+        }
+
+        return function (...$args) use ($limiter) {
+            $result = $limiter(...$args);
+
+            if (! is_array($result)) {
+                return $result;
+            }
+
+            $duplicates = (new Collection($result))->duplicates('key');
+
+            if ($duplicates->isEmpty()) {
+                return $result;
+            }
+
+            foreach ($result as $limit) {
+                if ($duplicates->contains($limit->key)) {
+                    $limit->key = $limit->fallbackKey();
+                }
+            }
+
+            return $result;
+        };
+    }
+
+    /**
+     * Attempts to execute a callback if it's not limited.
+     *
+     * @param  string  $key
+     * @param  int  $maxAttempts
+     * @param  \Closure  $callback
+     * @param  \DateTimeInterface|\DateInterval|int  $decaySeconds
+     * @return mixed
+     */
+    public function attempt($key, $maxAttempts, Closure $callback, $decaySeconds = 60)
+    {
+        if ($this->tooManyAttempts($key, $maxAttempts)) {
+            return false;
+        }
+
+        if (is_null($result = $callback())) {
+            $result = true;
+        }
+
+        return tap($result, function () use ($key, $decaySeconds) {
+            $this->hit($key, $decaySeconds);
+        });
     }
 
     /**
@@ -36,10 +127,8 @@ class RateLimiter
      */
     public function tooManyAttempts($key, $maxAttempts)
     {
-        $key = $this->cleanRateLimiterKey($key);
-
         if ($this->attempts($key) >= $maxAttempts) {
-            if ($this->cache->has($key.':timer')) {
+            if ($this->cache->has($this->cleanRateLimiterKey($key).':timer')) {
                 return true;
             }
 
@@ -50,13 +139,26 @@ class RateLimiter
     }
 
     /**
-     * Increment the counter for a given key for a given decay time.
+     * Increment (by 1) the counter for a given key for a given decay time.
      *
      * @param  string  $key
-     * @param  int  $decaySeconds
+     * @param  \DateTimeInterface|\DateInterval|int  $decaySeconds
      * @return int
      */
     public function hit($key, $decaySeconds = 60)
+    {
+        return $this->increment($key, $decaySeconds);
+    }
+
+    /**
+     * Increment the counter for a given key for a given decay time by a given amount.
+     *
+     * @param  string  $key
+     * @param  \DateTimeInterface|\DateInterval|int  $decaySeconds
+     * @param  int  $amount
+     * @return int
+     */
+    public function increment($key, $decaySeconds = 60, $amount = 1)
     {
         $key = $this->cleanRateLimiterKey($key);
 
@@ -64,15 +166,32 @@ class RateLimiter
             $key.':timer', $this->availableAt($decaySeconds), $decaySeconds
         );
 
-        $added = $this->cache->add($key, 0, $decaySeconds);
+        $added = $this->withoutSerializationOrCompression(
+            fn () => $this->cache->add($key, 0, $decaySeconds)
+        );
 
-        $hits = (int) $this->cache->increment($key);
+        $hits = (int) $this->cache->increment($key, $amount);
 
-        if (! $added && $hits == 1) {
-            $this->cache->put($key, 1, $decaySeconds);
+        if (! $added && $hits == $amount) {
+            $this->withoutSerializationOrCompression(
+                fn () => $this->cache->put($key, $amount, $decaySeconds)
+            );
         }
 
         return $hits;
+    }
+
+    /**
+     * Decrement the counter for a given key for a given decay time by a given amount.
+     *
+     * @param  string  $key
+     * @param  \DateTimeInterface|\DateInterval|int  $decaySeconds
+     * @param  int  $amount
+     * @return int
+     */
+    public function decrement($key, $decaySeconds = 60, $amount = 1)
+    {
+        return $this->increment($key, $decaySeconds, $amount * -1);
     }
 
     /**
@@ -85,14 +204,14 @@ class RateLimiter
     {
         $key = $this->cleanRateLimiterKey($key);
 
-        return $this->cache->get($key, 0);
+        return $this->withoutSerializationOrCompression(fn () => $this->cache->get($key, 0));
     }
 
     /**
      * Reset the number of attempts for the given key.
      *
      * @param  string  $key
-     * @return mixed
+     * @return bool
      */
     public function resetAttempts($key)
     {
@@ -108,13 +227,25 @@ class RateLimiter
      * @param  int  $maxAttempts
      * @return int
      */
-    public function retriesLeft($key, $maxAttempts)
+    public function remaining($key, $maxAttempts)
     {
         $key = $this->cleanRateLimiterKey($key);
 
         $attempts = $this->attempts($key);
 
-        return $maxAttempts - $attempts;
+        return max(0, $maxAttempts - $attempts);
+    }
+
+    /**
+     * Get the number of retries left for the given key.
+     *
+     * @param  string  $key
+     * @param  int  $maxAttempts
+     * @return int
+     */
+    public function retriesLeft($key, $maxAttempts)
+    {
+        return $this->remaining($key, $maxAttempts);
     }
 
     /**
@@ -142,7 +273,7 @@ class RateLimiter
     {
         $key = $this->cleanRateLimiterKey($key);
 
-        return $this->cache->get($key.':timer') - $this->currentTime();
+        return max(0, $this->cache->get($key.':timer') - $this->currentTime());
     }
 
     /**
@@ -154,5 +285,41 @@ class RateLimiter
     public function cleanRateLimiterKey($key)
     {
         return preg_replace('/&([a-z])[a-z]+;/i', '$1', htmlentities($key));
+    }
+
+    /**
+     * Execute the given callback without serialization or compression when applicable.
+     *
+     * @template TReturn
+     *
+     * @param  (callable(): TReturn)  $callback
+     * @return TReturn
+     */
+    protected function withoutSerializationOrCompression(callable $callback)
+    {
+        $store = $this->cache->getStore();
+
+        if (! $store instanceof RedisStore) {
+            return $callback();
+        }
+
+        $connection = $store->connection();
+
+        if (! $connection instanceof PhpRedisConnection) {
+            return $callback();
+        }
+
+        return $connection->withoutSerializationOrCompression($callback);
+    }
+
+    /**
+     * Resolve the rate limiter name.
+     *
+     * @param  \UnitEnum|string  $name
+     * @return string
+     */
+    private function resolveLimiterName($name): string
+    {
+        return (string) enum_value($name);
     }
 }

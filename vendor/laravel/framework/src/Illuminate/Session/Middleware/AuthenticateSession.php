@@ -2,11 +2,14 @@
 
 namespace Illuminate\Session\Middleware;
 
+use BadMethodCallException;
 use Closure;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
+use Illuminate\Contracts\Session\Middleware\AuthenticatesSessions;
+use Illuminate\Http\Request;
 
-class AuthenticateSession
+class AuthenticateSession implements AuthenticatesSessions
 {
     /**
      * The authentication factory implementation.
@@ -16,10 +19,16 @@ class AuthenticateSession
     protected $auth;
 
     /**
+     * The callback that should be used to generate the authentication redirect path.
+     *
+     * @var callable
+     */
+    protected static $redirectToCallback;
+
+    /**
      * Create a new middleware instance.
      *
      * @param  \Illuminate\Contracts\Auth\Factory  $auth
-     * @return void
      */
     public function __construct(AuthFactory $auth)
     {
@@ -35,28 +44,33 @@ class AuthenticateSession
      */
     public function handle($request, Closure $next)
     {
-        if (! $request->hasSession() || ! $request->user()) {
+        if (! $request->hasSession() || ! $request->user() || ! $request->user()->getAuthPassword()) {
             return $next($request);
         }
 
-        if ($this->auth->viaRemember()) {
-            $passwordHash = explode('|', $request->cookies->get($this->auth->getRecallerName()))[2] ?? null;
+        if ($this->guard()->viaRemember()) {
+            $passwordHashFromCookie = explode('|', $request->cookies->get($this->guard()->getRecallerName()))[2] ?? null;
 
-            if (! $passwordHash || $passwordHash != $request->user()->getAuthPassword()) {
+            if (! $passwordHashFromCookie ||
+                ! $this->validatePasswordHash($request->user()->getAuthPassword(), $passwordHashFromCookie)) {
                 $this->logout($request);
             }
         }
 
-        if (! $request->session()->has('password_hash')) {
+        if (! $request->session()->has('password_hash_'.$this->auth->getDefaultDriver())) {
             $this->storePasswordHashInSession($request);
         }
 
-        if ($request->session()->get('password_hash') !== $request->user()->getAuthPassword()) {
+        $sessionPasswordHash = $request->session()->get('password_hash_'.$this->auth->getDefaultDriver());
+
+        if (! $this->validatePasswordHash($request->user()->getAuthPassword(), $sessionPasswordHash)) {
             $this->logout($request);
         }
 
         return tap($next($request), function () use ($request) {
-            $this->storePasswordHashInSession($request);
+            if (! is_null($this->guard()->user())) {
+                $this->storePasswordHashInSession($request);
+            }
         });
     }
 
@@ -72,9 +86,34 @@ class AuthenticateSession
             return;
         }
 
+        $passwordHash = $request->user()->getAuthPassword();
+
+        try {
+            $passwordHash = $this->guard()->hashPasswordForCookie($passwordHash);
+        } catch (BadMethodCallException) {
+        }
+
         $request->session()->put([
-            'password_hash' => $request->user()->getAuthPassword(),
+            'password_hash_'.$this->auth->getDefaultDriver() => $passwordHash,
         ]);
+    }
+
+    /**
+     * Validate the password hash against the stored value.
+     *
+     * @param  string  $passwordHash
+     * @param  string  $storedValue
+     * @return bool
+     */
+    protected function validatePasswordHash($passwordHash, $storedValue)
+    {
+        try {
+            // Try new HMAC format first, then fall back to raw password hash format for backward compatibility
+            return hash_equals($this->guard()->hashPasswordForCookie($passwordHash), $storedValue)
+                || hash_equals($passwordHash, $storedValue);
+        } catch (BadMethodCallException) {
+            return hash_equals($passwordHash, $storedValue);
+        }
     }
 
     /**
@@ -87,10 +126,46 @@ class AuthenticateSession
      */
     protected function logout($request)
     {
-        $this->auth->logoutCurrentDevice();
+        $this->guard()->logoutCurrentDevice();
 
         $request->session()->flush();
 
-        throw new AuthenticationException;
+        throw new AuthenticationException(
+            'Unauthenticated.', [$this->auth->getDefaultDriver()], $this->redirectTo($request)
+        );
+    }
+
+    /**
+     * Get the guard instance that should be used by the middleware.
+     *
+     * @return \Illuminate\Contracts\Auth\Factory|\Illuminate\Contracts\Auth\Guard
+     */
+    protected function guard()
+    {
+        return $this->auth;
+    }
+
+    /**
+     * Get the path the user should be redirected to when their session is not authenticated.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return string|null
+     */
+    protected function redirectTo(Request $request)
+    {
+        if (static::$redirectToCallback) {
+            return call_user_func(static::$redirectToCallback, $request);
+        }
+    }
+
+    /**
+     * Specify the callback that should be used to generate the redirect path.
+     *
+     * @param  callable  $redirectToCallback
+     * @return void
+     */
+    public static function redirectUsing(callable $redirectToCallback)
+    {
+        static::$redirectToCallback = $redirectToCallback;
     }
 }
