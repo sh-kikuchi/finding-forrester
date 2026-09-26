@@ -46,6 +46,9 @@ new class extends Component
 
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                    <x-nav-link :href="route('search')" :active="request()->routeIs('search', 'book.searchGoogle')" wire:navigate>
+                        {{ __('本を見つける') }}
+                    </x-nav-link>
                     @if ($this->canBrowseStore())
                         <x-nav-link :href="route('store.index')" :active="request()->routeIs('store.index')" wire:navigate>
                             {{ __('本屋') }}
@@ -55,14 +58,11 @@ new class extends Component
                         </x-nav-link>
                     @endif
                     @if ($this->isAdmin())
-                        <x-nav-link :href="route('search')" :active="request()->routeIs('search')" wire:navigate>
-                            {{ __('本を見つける') }}
-                        </x-nav-link>
                         <x-nav-link :href="route('book.create')" :active="request()->routeIs('book.create')" wire:navigate>
                             {{ __('新しい本を登録する') }}
                         </x-nav-link>
                         <x-nav-link :href="route('book.new')" :active="request()->routeIs('book.new')" wire:navigate>
-                            {{ __('本棚にストックする') }}
+                            {{ __('新しい本を探す') }}
                         </x-nav-link>
                         <x-nav-link :href="route('shop.orders.index')" :active="request()->routeIs('shop.orders.index')" wire:navigate>
                             {{ __('受注一覧') }}
@@ -139,6 +139,9 @@ new class extends Component
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
+            <x-responsive-nav-link :href="route('search')" :active="request()->routeIs('search', 'book.searchGoogle')" wire:navigate>
+                {{ __('本を見つける') }}
+            </x-responsive-nav-link>
             @if ($this->canBrowseStore())
                 <x-responsive-nav-link :href="route('store.index')" :active="request()->routeIs('store.index')" wire:navigate>
                     {{ __('本屋') }}
@@ -148,11 +151,8 @@ new class extends Component
                 </x-responsive-nav-link>
             @endif
             @if ($this->isAdmin())
-                <x-responsive-nav-link :href="route('search')" :active="request()->routeIs('search')" wire:navigate>
-                    {{ __('本を見つける') }}
-                </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('book.new')" :active="request()->routeIs('book.new')" wire:navigate>
-                    {{ __('本棚にストックする') }}
+                    {{ __('新しい本を探す') }}
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('book.create')" :active="request()->routeIs('book.create')" wire:navigate>
                     {{ __('新しい本を登録する') }}

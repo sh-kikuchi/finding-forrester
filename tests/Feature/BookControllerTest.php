@@ -120,25 +120,164 @@ class BookControllerTest extends TestCase
         });
     }
 
-    public function test_guest_is_redirected_to_login_when_searching(): void
+    public function test_guest_can_search_books_by_title_and_sees_shop_link_and_add_to_cart_button(): void
     {
-        $response = $this->post('/book/search', ['a_search' => 'Forrester']);
+        $matching = Book::factory()->create(['title' => 'Finding Forrester']);
+        Stock::factory()->create(['book_id' => $matching->id, 'stock' => 3]);
+        Book::factory()->create(['title' => 'Unrelated Title']);
+
+        $response = $this->get('/search?q=Forrester');
+
+        $response->assertViewHas('books', function ($books) use ($matching) {
+            return $books->pluck('id')->all() === [$matching->id];
+        });
+        $response->assertSee('Finding Forrester');
+        $response->assertDontSee('Unrelated Title');
+        $response->assertSee(route('shop.show', ['shop' => $matching->user_id]), false);
+        $response->assertSee(__('カートに追加'));
+    }
+
+    public function test_an_individual_user_can_search_books_by_title(): void
+    {
+        $user = User::factory()->create();
+        $matching = Book::factory()->create(['title' => 'Finding Forrester']);
+        Stock::factory()->create(['book_id' => $matching->id, 'stock' => 3]);
+
+        $response = $this->actingAs($user)->get('/search?q=Forrester');
+
+        $response->assertSee('Finding Forrester');
+        $response->assertSee(__('カートに追加'));
+    }
+
+    public function test_site_search_hides_books_that_are_not_for_sale_from_non_admins(): void
+    {
+        Book::factory()->create(['title' => 'Finding Forrester', 'is_for_sale' => false]);
+
+        $response = $this->get('/search?q=Forrester');
+
+        $response->assertDontSee('Finding Forrester');
+        $response->assertSee(__('該当する本が見つかりませんでした。'));
+    }
+
+    public function test_admin_site_search_lists_only_their_own_books_without_purchase_controls(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $ownBook = Book::factory()->create(['user_id' => $admin->id, 'title' => 'Finding Forrester Own']);
+        Book::factory()->create(['title' => 'Finding Forrester Other Shop']);
+
+        $response = $this->actingAs($admin)->get('/search?q=Forrester');
+
+        $response->assertViewHas('books', function ($books) use ($ownBook) {
+            return $books->pluck('id')->all() === [$ownBook->id];
+        });
+        $response->assertSee(__('編集'));
+        $response->assertDontSee(__('カートに追加'));
+        $response->assertDontSee(__('取扱店舗'));
+    }
+
+    public function test_admin_site_search_includes_their_own_books_that_are_not_for_sale(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $ownBook = Book::factory()->create(['user_id' => $admin->id, 'title' => 'Finding Forrester', 'is_for_sale' => false]);
+
+        $response = $this->actingAs($admin)->get('/search?q=Forrester');
+
+        $response->assertViewHas('books', function ($books) use ($ownBook) {
+            return $books->pluck('id')->all() === [$ownBook->id];
+        });
+    }
+
+    public function test_site_search_treats_like_wildcards_in_the_keyword_literally(): void
+    {
+        $literal = Book::factory()->create(['title' => '100% Pure']);
+        Book::factory()->create(['title' => '1000 Pure']);
+
+        $response = $this->get('/search?q='.urlencode('100%'));
+
+        $response->assertViewHas('books', function ($books) use ($literal) {
+            return $books->pluck('id')->all() === [$literal->id];
+        });
+    }
+
+    public function test_site_search_pagination_links_keep_the_keyword(): void
+    {
+        Book::factory()->count(10)->sequence(fn ($sequence) => ['title' => 'Forrester '.$sequence->index])->create();
+
+        $response = $this->get('/search?q=Forrester');
+
+        $response->assertSee('q=Forrester&amp;page=2', false);
+    }
+
+    public function test_site_search_shows_a_message_when_nothing_matches(): void
+    {
+        Book::factory()->create(['title' => 'Unrelated Title']);
+
+        $response = $this->get('/search?q=Forrester');
+
+        $response->assertSee(__('該当する本が見つかりませんでした。'));
+    }
+
+    public function test_site_search_without_a_keyword_shows_only_the_form(): void
+    {
+        Book::factory()->create(['title' => 'Finding Forrester']);
+
+        $response = $this->get('/search');
+
+        $response->assertViewMissing('books');
+        $response->assertDontSee('Finding Forrester');
+        $response->assertDontSee(__('該当する本が見つかりませんでした。'));
+    }
+
+    public function test_site_search_escapes_the_keyword_in_the_page(): void
+    {
+        $response = $this->get('/search?q='.urlencode('<script>alert(1)</script>'));
+
+        $response->assertDontSee('<script>alert(1)</script>', false);
+        $response->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false);
+    }
+
+    public function test_google_search_tab_is_hidden_from_non_admins(): void
+    {
+        $response = $this->get('/search');
+
+        $response->assertDontSee(__('GoogleBookから本を検索'));
+        $response->assertDontSee(route('book.searchGoogle'), false);
+    }
+
+    public function test_google_search_tab_is_shown_to_admins(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $response = $this->actingAs($admin)->get('/search');
+
+        $response->assertSee(__('GoogleBookから本を検索'));
+        $response->assertSee(route('book.searchGoogle'), false);
+    }
+
+    public function test_guest_is_redirected_to_login_when_searching_google_books(): void
+    {
+        $response = $this->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
         $response->assertRedirect(route('login'));
     }
 
-    public function test_site_search_finds_books_by_title(): void
+    public function test_an_individual_user_is_forbidden_from_searching_google_books(): void
     {
-        $user = User::factory()->admin()->create();
-        $matching = Book::factory()->create(['title' => 'Finding Forrester']);
-        Book::factory()->create(['title' => 'Unrelated Title']);
+        $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->post('/book/search', ['a_search' => 'Forrester']);
+        $response = $this->actingAs($user)->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
-        $response->assertOk();
-        $response->assertViewHas('books', function ($books) use ($matching) {
-            return $books->pluck('id')->all() === [$matching->id];
-        });
+        $response->assertForbidden();
+    }
+
+    public function test_google_search_without_a_keyword_does_not_call_the_api(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Http::preventStrayRequests();
+
+        $response = $this->actingAs($admin)->get(route('book.searchGoogle'));
+
+        $response->assertViewMissing('json_decode');
     }
 
     public function test_google_books_search_returns_api_results(): void
@@ -153,7 +292,7 @@ class BookControllerTest extends TestCase
             ]),
         ]);
 
-        $response = $this->actingAs($user)->post('/book/search', ['b_search' => 'Some Book']);
+        $response = $this->actingAs($user)->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
         $response->assertOk();
         $response->assertViewHas('json_decode', function ($json) {
@@ -172,7 +311,7 @@ class BookControllerTest extends TestCase
         Http::preventStrayRequests();
         Http::fake(['https://www.googleapis.com/books/v1/volumes*' => Http::response(['items' => []])]);
 
-        $this->actingAs($user)->post('/book/search', ['b_search' => 'Some Book']);
+        $this->actingAs($user)->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
         Http::assertSent(fn (ClientRequest $request) => $request['key'] === 'test-api-key');
     }
@@ -183,7 +322,7 @@ class BookControllerTest extends TestCase
         Http::preventStrayRequests();
         Http::fake(['https://www.googleapis.com/books/v1/volumes*' => Http::response(['error' => ['message' => 'Quota exceeded']], 429)]);
 
-        $response = $this->actingAs($user)->post('/book/search', ['b_search' => 'Some Book']);
+        $response = $this->actingAs($user)->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
         $response->assertOk();
         $response->assertSee('Google Books検索でエラーが発生しました。しばらくしてから再度お試しください。');
@@ -197,7 +336,7 @@ class BookControllerTest extends TestCase
             throw new ConnectionException('Could not resolve host');
         });
 
-        $response = $this->actingAs($user)->post('/book/search', ['b_search' => 'Some Book']);
+        $response = $this->actingAs($user)->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
         $response->assertOk();
         $response->assertSee('Google Booksへの接続に失敗しました。しばらくしてから再度お試しください。');
@@ -215,7 +354,7 @@ class BookControllerTest extends TestCase
             ]),
         ]);
 
-        $response = $this->actingAs($user)->post('/book/search', ['b_search' => 'Some Book']);
+        $response = $this->actingAs($user)->get(route('book.searchGoogle', ['q' => 'Some Book']));
 
         $response->assertOk();
         $response->assertSee(route('book.create.fromGoogle'), false);

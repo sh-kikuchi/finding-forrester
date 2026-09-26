@@ -5,43 +5,47 @@
         </h2>
     </x-slot>
 
+    @php $isAdmin = auth()->check() && auth()->user()->isAdmin(); @endphp
+
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            <div x-data="{ tab: '{{ isset($json_decode) ? 'google' : 'shop' }}' }" class="max-w-xl">
-                <div class="flex gap-2 border-b border-gray-200 dark:border-gray-700 mb-4">
-                    <button
-                        type="button"
-                        @click="tab = 'shop'"
-                        :class="tab === 'shop' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400'"
-                        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-                    >
-                        {{ __('書店から本を検索') }}
-                    </button>
-                    <button
-                        type="button"
-                        @click="tab = 'google'"
-                        :class="tab === 'google' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400'"
-                        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-                    >
-                        {{ __('GoogleBookから本を検索') }}
-                    </button>
-                </div>
+            <div x-data="{ tab: '{{ isset($json_decode) || isset($googleSearchError) ? 'google' : 'shop' }}' }" class="max-w-xl">
+                @if ($isAdmin)
+                    <div class="flex gap-2 border-b border-gray-200 dark:border-gray-700 mb-4">
+                        <button
+                            type="button"
+                            @click="tab = 'shop'"
+                            :class="tab === 'shop' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400'"
+                            class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+                        >
+                            {{ __('書店から本を検索') }}
+                        </button>
+                        <button
+                            type="button"
+                            @click="tab = 'google'"
+                            :class="tab === 'google' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400'"
+                            class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+                        >
+                            {{ __('GoogleBookから本を検索') }}
+                        </button>
+                    </div>
+                @endif
 
                 <div x-show="tab === 'shop'" class="p-4 sm:p-6 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
-                    <form method="post" action="{{ route('search') }}" class="flex gap-2">
-                        @csrf
-                        <x-text-input name="a_search" type="text" class="block w-full" placeholder="{{ __('どの本をお探しですか？') }}" />
+                    <form method="get" action="{{ route('search') }}" class="flex gap-2">
+                        <x-text-input name="q" type="text" class="block w-full" :value="$key ?? ''" placeholder="{{ __('どの本をお探しですか？') }}" />
                         <x-primary-button>{{ __('検索') }}</x-primary-button>
                     </form>
                 </div>
 
-                <div x-show="tab === 'google'" class="p-4 sm:p-6 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
-                    <form method="post" action="{{ route('search') }}" class="flex gap-2">
-                        @csrf
-                        <x-text-input name="b_search" type="text" class="block w-full" placeholder="{{ __('どの本をお探しですか？') }}" />
-                        <x-primary-button>{{ __('検索') }}</x-primary-button>
-                    </form>
-                </div>
+                @if ($isAdmin)
+                    <div x-show="tab === 'google'" class="p-4 sm:p-6 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+                        <form method="get" action="{{ route('book.searchGoogle') }}" class="flex gap-2">
+                            <x-text-input name="q" type="text" class="block w-full" placeholder="{{ __('どの本をお探しですか？') }}" />
+                            <x-primary-button>{{ __('検索') }}</x-primary-button>
+                        </form>
+                    </div>
+                @endif
             </div>
 
             @isset($key)
@@ -52,14 +56,23 @@
 
             @isset($books)
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    @foreach ($books as $book)
+                    @forelse ($books as $book)
                         <x-book-card :book="$book">
-                            <a href="{{ route('shop.show', ['shop' => $book->user_id]) }}" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
-                                {{ __('取扱店舗') }}
-                            </a>
+                            @unless ($isAdmin)
+                                <div class="space-y-2">
+                                    <a href="{{ route('shop.show', ['shop' => $book->user_id]) }}" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                                        {{ __('取扱店舗') }}
+                                    </a>
+                                    <x-book-purchase-actions :book="$book" />
+                                </div>
+                            @endunless
                         </x-book-card>
-                    @endforeach
+                    @empty
+                        <p class="text-sm text-gray-600 dark:text-gray-400">{{ __('該当する本が見つかりませんでした。') }}</p>
+                    @endforelse
                 </div>
+
+                {{ $books->links() }}
             @endisset
 
             @isset($googleSearchError)

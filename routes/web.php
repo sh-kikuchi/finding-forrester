@@ -18,6 +18,9 @@ Route::view('profile', 'profile')
 // 入荷本一覧: 誰でも閲覧可能（ゲスト・個人ユーザー・管理者いずれもOK）
 Route::get('/new', [BookController::class, 'new'])->name('book.new');
 
+// 本のタイトル検索: 誰でも利用可能（管理者は自分の店の本だけが対象）
+Route::get('/search', [BookController::class, 'search'])->name('search');
+
 // 本屋・カート: ゲスト+個人ユーザーが利用可能。ログイン中の管理者は利用不可
 Route::middleware('role:user')->group(function () {
     Route::get('/store', [StoreController::class, 'index'])->name('store.index');
@@ -30,7 +33,7 @@ Route::middleware('role:user')->group(function () {
 
 // 本の在庫管理・ショップ情報編集: 管理者（店舗）専用
 Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::match(['get', 'post'], '/book/search', [BookController::class, 'search'])->name('search');
+    Route::get('/book/google-search', [BookController::class, 'searchGoogle'])->name('book.searchGoogle');
     Route::match(['get', 'post'], '/book/create', [BookController::class, 'create'])->name('book.create');
     Route::post('/book/create/from-google', [BookController::class, 'createFromGoogle'])->name('book.create.fromGoogle');
     Route::get('/book/{book}', [BookController::class, 'show'])->name('book.show');

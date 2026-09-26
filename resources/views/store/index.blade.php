@@ -20,20 +20,8 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 @forelse ($books as $book)
-                    @php $stockCount = $book->stock?->stock ?? 0; @endphp
                     <x-book-card :book="$book">
-                        <div class="flex items-center justify-between gap-3">
-                            <p class="font-semibold text-gray-900 dark:text-gray-100">¥{{ number_format($book->price) }}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('在庫') }}: {{ $stockCount }}</p>
-                        </div>
-                        <form method="post" action="{{ route('cart.store') }}" class="mt-2">
-                            @csrf
-                            <input type="hidden" name="book_id" value="{{ $book->id }}">
-                            <input type="hidden" name="quantity" value="1">
-                            <x-primary-button class="w-full justify-center" :disabled="$stockCount < 1">
-                                {{ $stockCount < 1 ? __('在庫切れ') : __('カートに追加') }}
-                            </x-primary-button>
-                        </form>
+                        <x-book-purchase-actions :book="$book" />
                     </x-book-card>
                 @empty
                     <p class="text-sm text-gray-600 dark:text-gray-400">{{ __('該当する本が見つかりませんでした。') }}</p>

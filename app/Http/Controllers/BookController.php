@@ -118,26 +118,57 @@ class BookController extends Controller
     }
 
     /**
-     * タイトルによるサイト内検索、またはGoogle Books APIによる検索を行う。
+     * タイトルによるサイト内検索を行う。
      *
-     * @param  Request  $request  `a_search`（サイト内検索）または`b_search`（Google検索）を含むリクエスト
-     * @return View 検索結果画面
+     * 誰でも利用可能。管理者は自分の店の本（販売対象外を含む）だけを、
+     * それ以外（ゲスト・個人ユーザー）は販売対象の本だけを検索対象にする。
+     *
+     * @param  Request  $request  クエリ文字列 `q`（タイトルのキーワード）を受け取るHTTPリクエスト
+     * @return View 検索画面（キーワードが空の場合は入力フォームのみ）
      */
     public function search(Request $request): View
     {
-        if ($request->filled('a_search')) {
-            $key = $request->string('a_search')->value();
+        $key = $request->string('q')->trim()->value();
 
-            $books = Book::where('title', 'like', "%{$key}%")->simplePaginate(9);
-
-            return view('book.search', compact('books', 'key'));
+        if ($key === '') {
+            return view('book.search');
         }
 
-        if ($request->filled('b_search')) {
-            return $this->searchGoogleBooks($request->string('b_search')->value());
+        $user = $request->user();
+        // LIKEのワイルドカード（% _）をキーワード内でも文字として扱う。
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $key).'%';
+
+        $books = Book::query()
+            ->with('stock')
+            ->whereRaw("title like ? escape '!'", [$pattern])
+            ->when(
+                $user?->isAdmin(),
+                fn ($query) => $query->where('user_id', $user->id),
+                fn ($query) => $query->where('is_for_sale', true),
+            )
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->simplePaginate(9)
+            ->withQueryString();
+
+        return view('book.search', compact('books', 'key'));
+    }
+
+    /**
+     * Google Books APIで本を検索する（管理者専用。ルート側のミドルウェアで制限）。
+     *
+     * @param  Request  $request  クエリ文字列 `q`（検索キーワード）を受け取るHTTPリクエスト
+     * @return View 検索画面（キーワードが空の場合は入力フォームのみ）
+     */
+    public function searchGoogle(Request $request): View
+    {
+        $query = $request->string('q')->trim()->value();
+
+        if ($query === '') {
+            return view('book.search');
         }
 
-        return view('book.search');
+        return $this->searchGoogleBooks($query);
     }
 
     /**

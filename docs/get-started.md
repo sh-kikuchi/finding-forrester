@@ -260,8 +260,9 @@ if ($shipped === 0) {
 
 ### 3-6. 外部 API 連携（Google Books 検索）
 
-実例: `BookController::search` / `searchGoogleBooks`
+実例: `BookController::searchGoogle` / `searchGoogleBooks`（管理者専用。`GET /book/google-search?q=`、ルート名 `book.searchGoogle`）
 
+- サイト内のタイトル検索（`BookController::search`、`GET /search?q=`）は誰でも使える公開ルート。Google 検索とは別のアクション・別のルートに分けてある。
 - `Http::timeout(10)->get(...)` で呼び出す。API キーは `config('services.google_books.key')`（`.env` の `GOOGLE_BOOKS_API_KEY`、任意）。
 - **失敗時の処理を必ず書く**: `ConnectionException` の catch と `$response->failed()` の両方で、`Log::warning()` を出して画面に分かりやすいメッセージを返す。
 - テストでは `Http::fake()` で API 応答を差し替える。成功・APIエラー・接続失敗の3ケースと、キー送信の有無を検証している（`BookControllerTest`）。
@@ -282,9 +283,9 @@ if ($shipped === 0) {
 
 | グループ | ミドルウェア | 使える人 |
 | --- | --- | --- |
-| `/new`（入荷本一覧） | なし | 全員 |
+| `/new`（入荷本一覧）、`/search`（タイトル検索） | なし | 全員（`/search` の管理者は自分の店の本だけが対象） |
 | `/store`、`/cart` | `role:user` | ゲスト + 個人ユーザー |
-| `/book/*`、`/shop/edit`、`/shop/orders` | `auth` + `role:admin` | 管理者 |
+| `/book/*`（Google検索 `/book/google-search` を含む）、`/shop/edit`、`/shop/orders` | `auth` + `role:admin` | 管理者 |
 | `/checkout`、`/orders` | `auth` + `role:user` | 個人ユーザー |
 
 ---
